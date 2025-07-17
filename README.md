@@ -1,7 +1,5 @@
 # hvd
 
-> **Repository:** [https://github.com/coredds/hvd](https://github.com/coredds/hvd)
-
 A modern JavaFX-based media downloader built on [yt-dlp](https://github.com/yt-dlp/yt-dlp), allowing you to download videos and audio from YouTube and other platforms with ease.
 
 **✅ Cross-Platform Support:** Windows, macOS, and Linux compatible
