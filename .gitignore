@@ -1,0 +1,205 @@
+# Maven
+target/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+dependency-reduced-pom.xml
+buildNumber.properties
+.mvn/timing.properties
+.mvn/wrapper/maven-wrapper.jar
+
+# Java
+*.class
+*.log
+*.ctxt
+.mtj.tmp/
+*.jar
+*.war
+*.nar
+*.ear
+*.zip
+*.tar.gz
+*.rar
+hs_err_pid*
+replay_pid*
+
+# IDE - IntelliJ IDEA
+.idea/
+*.iws
+*.iml
+*.ipr
+out/
+
+# IDE - Eclipse
+.metadata
+bin/
+tmp/
+*.tmp
+*.bak
+*.swp
+*~.nib
+local.properties
+.settings/
+.loadpath
+.recommenders
+.project
+.externaltoolbuilders/
+*.launch
+.factorypath
+.buildpath
+.target
+
+# IDE - VS Code
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.code-workspace
+
+# IDE - NetBeans
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+[Dd]esktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# JavaFX
+*.fxml~
+
+# Application specific
+*.log
+logs/
+
+# Maven local repository (if accidentally copied)
+.m2/
+!.m2/settings.xml
+
+# Temporary directories
+temp/
+tmp/
+*.tmp
+
+# Generated files
+generated/
+.generated/
+
+# Distribution builds
+dist/
+build/
+releases/
+
+# macOS app bundle (keep structure, exclude build artifacts)
+hvd.app/Contents/Resources/
+
+# Maven distribution (exclude from repository)
+apache-maven-*/
+
+# Icons directory (if regenerated)
+src/main/resources/icons/generated/
+
+# Package files
+*.dmg
+*.pkg
+*.deb
+*.rpm
+*.msi
+*.exe
+
+# Test reports
+surefire-reports/
+failsafe-reports/
+
+# Coverage reports
+jacoco.exec
+target/site/jacoco/
+
+# Dependency directories
+node_modules/
+jspm_packages/
+
+# Optional npm cache directory
+.npm
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Cache
+.cache/
+
+# Backup files
+*.backup
+*.bak
+*~
+
+# Archive files
+*.7z
+*.dmg
+*.gz
+*.iso
+*.rar
+*.tar
+*.zip
+
+# JVM crash logs
+hs_err_pid*.log
+
+# Application runtime
+runtime/
+cache/
+
+# Custom application directories that may be created
+downloads/
+output/ 

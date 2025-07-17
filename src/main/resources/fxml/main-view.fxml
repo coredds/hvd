@@ -1,0 +1,215 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+
+<VBox xmlns="http://javafx.com/javafx/11.0.1" xmlns:fx="http://javafx.com/fxml/1" fx:controller="coredds.hvd.controller.MainController">
+   <children>
+
+      <TabPane prefHeight="550.0" prefWidth="800.0" tabClosingPolicy="UNAVAILABLE">
+         <!-- Downloads Tab -->
+         <Tab text="Downloads">
+            <content>
+               <VBox spacing="10.0">
+                  <padding>
+                     <Insets bottom="10.0" left="10.0" right="10.0" top="10.0" />
+                  </padding>
+                  <children>
+                     <!-- URL Input Section -->
+                     <VBox spacing="5.0">
+                        <children>
+                           <Label text="Video URLs (one per line):" />
+                           <TextArea fx:id="urlTextArea" prefHeight="80.0" promptText="Enter video URLs here..." />
+                           <Button fx:id="addToQueueButton" text="Add to Queue" />
+                        </children>
+                     </VBox>
+                     
+                     <!-- Download Options Section -->
+                     <TitledPane collapsible="false" text="Download Options">
+                        <content>
+                           <VBox spacing="10.0">
+                              <padding>
+                                 <Insets bottom="10.0" left="10.0" right="10.0" top="10.0" />
+                              </padding>
+                              <children>
+                                 <!-- Download Type -->
+                                 <HBox spacing="20.0">
+                                    <children>
+                                       <Label text="Download Type:" />
+                                       <RadioButton fx:id="videoRadioButton" selected="true" text="Video" />
+                                       <RadioButton fx:id="audioRadioButton" text="Audio Only" />
+                                    </children>
+                                 </HBox>
+                                 
+                                 <!-- Audio Format -->
+                                 <HBox spacing="10.0">
+                                    <children>
+                                       <Label text="Audio Format:" />
+                                       <ComboBox fx:id="audioFormatComboBox" prefWidth="100.0" />
+                                    </children>
+                                 </HBox>
+                                 
+                                 <!-- Video Format -->
+                                 <HBox spacing="10.0">
+                                    <children>
+                                       <Label text="Video Format:" />
+                                       <ComboBox fx:id="videoFormatComboBox" prefWidth="150.0" />
+                                    </children>
+                                 </HBox>
+                                 
+                                 <!-- Output Directory -->
+                                 <HBox spacing="10.0">
+                                    <children>
+                                       <Label text="Output Directory:" />
+                                       <TextField fx:id="outputDirectoryField" prefWidth="300.0" />
+                                       <Button fx:id="browseOutputButton" text="Browse" />
+                                    </children>
+                                 </HBox>
+                                 
+                                 <!-- Additional Options -->
+                                 <HBox spacing="20.0">
+                                    <children>
+                                       <CheckBox fx:id="embedSubtitlesCheckBox" text="Embed Subtitles" />
+                                       <CheckBox fx:id="embedThumbnailCheckBox" text="Embed Thumbnail" />
+                                       <CheckBox fx:id="addMetadataCheckBox" text="Add Metadata" />
+                                    </children>
+                                 </HBox>
+                              </children>
+                           </VBox>
+                        </content>
+                     </TitledPane>
+                     
+                     <!-- Download Queue Section -->
+                     <VBox spacing="5.0" VBox.vgrow="ALWAYS">
+                        <children>
+                           <Label text="Download Queue:" />
+                           
+                           <!-- Queue Control Buttons -->
+                           <HBox spacing="10.0">
+                              <children>
+                                 <Button fx:id="startAllButton" style="-fx-background-color: #4CAF50; -fx-text-fill: white;" text="Start All" />
+                                 <Button fx:id="pauseAllButton" style="-fx-background-color: #FF9800; -fx-text-fill: white;" text="Pause All" />
+                                 <Button fx:id="removeSelectedButton" style="-fx-background-color: #F44336; -fx-text-fill: white;" text="Remove Selected" />
+                              </children>
+                           </HBox>
+                           
+                           <!-- Download Table -->
+                           <TableView fx:id="downloadTable" prefHeight="250.0" VBox.vgrow="ALWAYS">
+                              <columns>
+                                 <TableColumn fx:id="urlColumn" prefWidth="180.0" text="URL" />
+                                 <TableColumn fx:id="titleColumn" prefWidth="240.0" text="Title" />
+                                 <TableColumn fx:id="formatColumn" prefWidth="120.0" text="Format" />
+                                 <TableColumn fx:id="statusColumn" prefWidth="120.0" text="Status" />
+                                 <TableColumn fx:id="progressColumn" prefWidth="216.0" text="Progress" />
+                              </columns>
+                           </TableView>
+                        </children>
+                     </VBox>
+                  </children>
+               </VBox>
+            </content>
+         </Tab>
+         
+         <!-- Settings Tab -->
+         <Tab text="Settings">
+            <content>
+               <VBox spacing="20.0">
+                  <padding>
+                     <Insets bottom="20.0" left="20.0" right="20.0" top="20.0" />
+                  </padding>
+                  <children>
+                     <!-- yt-dlp Configuration -->
+                     <TitledPane collapsible="false" text="yt-dlp Configuration">
+                        <content>
+                           <VBox spacing="10.0">
+                              <padding>
+                                 <Insets bottom="10.0" left="10.0" right="10.0" top="10.0" />
+                              </padding>
+                              <children>
+                                 <HBox spacing="10.0">
+                                    <children>
+                                       <Label text="yt-dlp Path:" />
+                                       <TextField fx:id="ytDlpPathField" prefWidth="300.0" />
+                                       <Button fx:id="browseYtDlpButton" text="Browse" />
+                                       <Button fx:id="testYtDlpButton" text="Test" />
+                                    </children>
+                                 </HBox>
+                                 
+                                 <Label fx:id="statusLabel" text="Status: Unknown" />
+                              </children>
+                           </VBox>
+                        </content>
+                     </TitledPane>
+                     
+                     <!-- Default Settings -->
+                     <TitledPane collapsible="false" text="Default Settings">
+                        <content>
+                           <VBox spacing="10.0">
+                              <padding>
+                                 <Insets bottom="10.0" left="10.0" right="10.0" top="10.0" />
+                              </padding>
+                              <children>
+                                 <HBox spacing="10.0">
+                                    <children>
+                                       <Label text="Default Output Directory:" />
+                                       <TextField fx:id="defaultOutputField" prefWidth="300.0" />
+                                       <Button fx:id="browseDefaultOutputButton" text="Browse" />
+                                    </children>
+                                 </HBox>
+                              </children>
+                           </VBox>
+                        </content>
+                     </TitledPane>
+                     
+                     <!-- Instructions -->
+                     <TitledPane collapsible="false" text="Instructions">
+                        <content>
+                           <VBox spacing="10.0">
+                              <padding>
+                                 <Insets bottom="10.0" left="10.0" right="10.0" top="10.0" />
+                              </padding>
+                              <children>
+                                 <Label text="1. Install yt-dlp:" />
+                                 <Label text="   • pip install yt-dlp" />
+                                 <Label text="   • Or download from: https://github.com/yt-dlp/yt-dlp" />
+                                 <Label text="2. Configure the path to yt-dlp executable above" />
+                                 <Label text="3. Test the configuration using the 'Test' button" />
+                                 <Label text="4. Start downloading videos from the Downloads tab" />
+                              </children>
+                           </VBox>
+                        </content>
+                     </TitledPane>
+                  </children>
+               </VBox>
+            </content>
+         </Tab>
+         
+         <!-- Logs Tab -->
+         <Tab text="Logs">
+            <content>
+               <VBox spacing="10.0">
+                  <padding>
+                     <Insets bottom="10.0" left="10.0" right="10.0" top="10.0" />
+                  </padding>
+                  <children>
+                     <HBox spacing="10.0">
+                        <children>
+                           <Label text="Application Logs:" />
+                           <Pane HBox.hgrow="ALWAYS" />
+                           <Button fx:id="clearLogsButton" text="Clear Logs" />
+                        </children>
+                     </HBox>
+                     
+                     <ScrollPane fitToWidth="true" VBox.vgrow="ALWAYS">
+                        <content>
+                           <TextArea fx:id="logTextArea" editable="false" prefHeight="400.0" />
+                        </content>
+                     </ScrollPane>
+                  </children>
+               </VBox>
+            </content>
+         </Tab>
+      </TabPane>
+   </children>
+</VBox> 

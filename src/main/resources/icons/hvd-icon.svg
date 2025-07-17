@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="backgroundGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#4A90E2;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#2D5A9B;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="hGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#FFFFFF;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#E8F4FD;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="arrowGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#4CAF50;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#388E3C;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Background circle -->
+  <circle cx="32" cy="32" r="30" fill="url(#backgroundGradient)" stroke="#1E3A8A" stroke-width="2"/>
+  
+  <!-- Letter H -->
+  <g fill="url(#hGradient)" stroke="none">
+    <!-- Left vertical bar -->
+    <rect x="16" y="18" width="4" height="28" rx="2"/>
+    <!-- Right vertical bar -->
+    <rect x="44" y="18" width="4" height="28" rx="2"/>
+    <!-- Horizontal crossbar -->
+    <rect x="20" y="30" width="24" height="4" rx="2"/>
+  </g>
+  
+  <!-- Download arrow (positioned in bottom right) -->
+  <g transform="translate(42, 42)">
+    <!-- Arrow shaft -->
+    <rect x="8" y="2" width="2" height="12" fill="url(#arrowGradient)" rx="1"/>
+    <!-- Arrow head -->
+    <polygon points="5,10 9,14 13,10" fill="url(#arrowGradient)"/>
+  </g>
+  
+  <!-- Play button symbol (small, top right) -->
+  <g transform="translate(46, 10)">
+    <circle cx="6" cy="6" r="5" fill="#FF6B35" opacity="0.9"/>
+    <polygon points="4,3 4,9 9,6" fill="white"/>
+  </g>
+</svg> 
