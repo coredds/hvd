@@ -18,9 +18,7 @@ A modern JavaFX-based media downloader built on [yt-dlp](https://github.com/yt-d
 
 **🪟 Windows Users:** See [WINDOWS-SETUP.md](WINDOWS-SETUP.md) for detailed Windows installation guide with batch scripts.
 
-**🍎 macOS Users:** Use the shell scripts (`.sh` files) provided.
-
-**🐧 Linux Users:** Use the shell scripts (`.sh` files) provided.
+** Linux and macOS Users:** Use the shell scripts (`.sh` files) provided.
 
 ## Prerequisites
 
