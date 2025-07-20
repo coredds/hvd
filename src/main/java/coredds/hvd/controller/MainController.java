@@ -96,41 +96,65 @@ public class MainController implements Initializable {
     public void initialize(URL location, ResourceBundle resources) {
         logger.info("Initializing MainController");
 
-        // Initialize services
-        ytDlpService = new YtDlpService();
-        downloadItems = FXCollections.observableArrayList();
+        // Initialize executor service
         executorService = Executors.newCachedThreadPool();
+        downloadItems = FXCollections.observableArrayList();
 
-        // Setup UI components
-        setupDownloadTab();
-        setupSettingsTab();
-        setupLogsTab();
+        // Initialize YtDlpService
+        ytDlpService = new YtDlpService();
 
-        // Initial status check
-        checkYtDlpStatus();
-    }
-
-    private void setupDownloadTab() {
-        // Setup radio buttons
+        // Setup Download Type Toggle Group
         ToggleGroup downloadTypeGroup = new ToggleGroup();
         videoRadioButton.setToggleGroup(downloadTypeGroup);
         audioRadioButton.setToggleGroup(downloadTypeGroup);
         videoRadioButton.setSelected(true);
 
-        // Setup audio format combo box
-        audioFormatComboBox.getItems().addAll("mp3", "aac", "m4a", "opus", "flac", "wav");
+        // Setup format combo boxes
+        audioFormatComboBox.setItems(FXCollections.observableArrayList(
+                "mp3", "aac", "m4a", "opus", "flac", "wav"));
         audioFormatComboBox.setValue("mp3");
 
-        // Setup video format combo box
-        videoFormatComboBox.getItems().addAll(
-                "best", "bestvideo+bestaudio", "worst",
-                "mp4", "webm", "mkv", "avi", "mov",
-                "720p", "1080p", "1440p", "2160p (4K)",
-                "bestvideo[height<=720]+bestaudio",
-                "bestvideo[height<=1080]+bestaudio",
-                "bestvideo[height<=1440]+bestaudio",
-                "bestvideo[height<=2160]+bestaudio");
+        videoFormatComboBox.setItems(FXCollections.observableArrayList(
+                "best", "mp4", "webm", "mkv", "avi"));
         videoFormatComboBox.setValue("best");
+
+        // Setup combo box visibility based on download type
+        downloadTypeGroup.selectedToggleProperty().addListener((obs, oldToggle, newToggle) -> {
+            if (newToggle == audioRadioButton) {
+                audioFormatComboBox.setVisible(true);
+                videoFormatComboBox.setVisible(false);
+            } else {
+                audioFormatComboBox.setVisible(false);
+                videoFormatComboBox.setVisible(true);
+            }
+        });
+
+        // Setup button actions
+        browseOutputButton.setOnAction(e -> browseOutputDirectory());
+        addToQueueButton.setOnAction(e -> addToQueue());
+        startAllButton.setOnAction(e -> startAllDownloads());
+        pauseAllButton.setOnAction(e -> pauseAllDownloads());
+        removeSelectedButton.setOnAction(e -> removeSelectedItems());
+
+        // Set default output directory
+        String userHome = System.getProperty("user.home");
+        String defaultOutputPath = userHome + File.separator + "Downloads" + File.separator + "hvd";
+        outputDirectoryField.setText(defaultOutputPath);
+
+        // Setup Downloads Table
+        setupDownloadsTable();
+
+        // Setup Settings Tab
+        setupSettingsTab();
+        
+        // Setup Logs Tab
+        setupLogsTab();
+        
+        // Initial status check
+        checkYtDlpStatus();
+    }
+
+    private void setupDownloadsTable() {
 
         // Setup output directory
         outputDirectoryField.setText(System.getProperty("user.home") + File.separator + "Downloads");

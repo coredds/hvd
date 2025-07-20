@@ -3,6 +3,7 @@ package coredds.hvd;
 import javafx.application.Application;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Scene;
+import javafx.scene.image.Image;
 import javafx.stage.Stage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -23,7 +24,18 @@ public class HvdApplication extends Application {
         // Add CSS styling
         scene.getStylesheets().add(getClass().getResource("/css/styles.css").toExternalForm());
 
-        stage.setTitle("hvd");
+        // Set window title
+        stage.setTitle("Media Downloader");
+        
+        // Set application icons
+        stage.getIcons().addAll(
+            new Image(getClass().getResourceAsStream("/icons/32.png")),
+            new Image(getClass().getResourceAsStream("/icons/48.png")),
+            new Image(getClass().getResourceAsStream("/icons/64.png")),
+            new Image(getClass().getResourceAsStream("/icons/128.png")),
+            new Image(getClass().getResourceAsStream("/icons/256.png"))
+        );
+        
         stage.setScene(scene);
         stage.setMinWidth(720);
         stage.setMinHeight(480);
