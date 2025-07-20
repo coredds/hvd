@@ -2,6 +2,7 @@ package coredds.hvd.controller;
 
 import coredds.hvd.model.DownloadItem;
 import coredds.hvd.service.YtDlpService;
+import coredds.hvd.service.PreferencesService;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.concurrent.Task;
@@ -89,6 +90,7 @@ public class MainController implements Initializable {
 
     // Services and Data
     private YtDlpService ytDlpService;
+    private PreferencesService preferencesService;
     private ObservableList<DownloadItem> downloadItems;
     private ExecutorService executorService;
 
@@ -96,27 +98,26 @@ public class MainController implements Initializable {
     public void initialize(URL location, ResourceBundle resources) {
         logger.info("Initializing MainController");
 
-        // Initialize executor service
+        // Initialize services
         executorService = Executors.newCachedThreadPool();
         downloadItems = FXCollections.observableArrayList();
-
-        // Initialize YtDlpService
         ytDlpService = new YtDlpService();
+        preferencesService = new PreferencesService();
 
         // Setup Download Type Toggle Group
         ToggleGroup downloadTypeGroup = new ToggleGroup();
         videoRadioButton.setToggleGroup(downloadTypeGroup);
         audioRadioButton.setToggleGroup(downloadTypeGroup);
-        videoRadioButton.setSelected(true);
+
+        // Load and apply saved preferences
+        loadPreferences();
 
         // Setup format combo boxes
         audioFormatComboBox.setItems(FXCollections.observableArrayList(
                 "mp3", "aac", "m4a", "opus", "flac", "wav"));
-        audioFormatComboBox.setValue("mp3");
-
+        
         videoFormatComboBox.setItems(FXCollections.observableArrayList(
                 "best", "mp4", "webm", "mkv", "avi"));
-        videoFormatComboBox.setValue("best");
 
         // Setup combo box visibility based on download type
         downloadTypeGroup.selectedToggleProperty().addListener((obs, oldToggle, newToggle) -> {
@@ -127,7 +128,12 @@ public class MainController implements Initializable {
                 audioFormatComboBox.setVisible(false);
                 videoFormatComboBox.setVisible(true);
             }
+            // Save download type preference
+            saveDownloadTypePreference();
         });
+
+        // Add listeners to save preferences when user changes settings
+        setupPreferenceListeners();
 
         // Setup button actions
         browseOutputButton.setOnAction(e -> browseOutputDirectory());
@@ -135,11 +141,6 @@ public class MainController implements Initializable {
         startAllButton.setOnAction(e -> startAllDownloads());
         pauseAllButton.setOnAction(e -> pauseAllDownloads());
         removeSelectedButton.setOnAction(e -> removeSelectedItems());
-
-        // Set default output directory
-        String userHome = System.getProperty("user.home");
-        String defaultOutputPath = userHome + File.separator + "Downloads" + File.separator + "hvd";
-        outputDirectoryField.setText(defaultOutputPath);
 
         // Setup Downloads Table
         setupDownloadsTable();
@@ -207,15 +208,149 @@ public class MainController implements Initializable {
         appendLog("Application started");
     }
 
+    /**
+     * Load preferences and apply them to UI components
+     */
+    private void loadPreferences() {
+        // Load output directory
+        String savedOutputDir = preferencesService.getPreference(PreferencesService.OUTPUT_DIRECTORY, null);
+        if (savedOutputDir != null && new File(savedOutputDir).exists()) {
+            outputDirectoryField.setText(savedOutputDir);
+        } else {
+            // Use default if no saved preference or directory doesn't exist
+            String userHome = System.getProperty("user.home");
+            String defaultOutputPath = userHome + File.separator + "Downloads" + File.separator + "hvd";
+            outputDirectoryField.setText(defaultOutputPath);
+        }
+
+        // Load download type (audio vs video)
+        boolean isAudioMode = preferencesService.getBooleanPreference(PreferencesService.DOWNLOAD_TYPE_AUDIO, false);
+        if (isAudioMode) {
+            audioRadioButton.setSelected(true);
+        } else {
+            videoRadioButton.setSelected(true);
+        }
+
+        // Load format preferences
+        String savedAudioFormat = preferencesService.getPreference(PreferencesService.AUDIO_FORMAT, "mp3");
+        audioFormatComboBox.setValue(savedAudioFormat);
+
+        String savedVideoFormat = preferencesService.getPreference(PreferencesService.VIDEO_FORMAT, "best");
+        videoFormatComboBox.setValue(savedVideoFormat);
+
+        // Load checkbox preferences
+        embedSubtitlesCheckBox.setSelected(
+            preferencesService.getBooleanPreference(PreferencesService.EMBED_SUBTITLES, false));
+        embedThumbnailCheckBox.setSelected(
+            preferencesService.getBooleanPreference(PreferencesService.EMBED_THUMBNAIL, false));
+        addMetadataCheckBox.setSelected(
+            preferencesService.getBooleanPreference(PreferencesService.ADD_METADATA, false));
+
+        // Load yt-dlp path
+        String savedYtDlpPath = preferencesService.getPreference(PreferencesService.YTDLP_PATH, "yt-dlp");
+        if (ytDlpPathField != null) {
+            ytDlpPathField.setText(savedYtDlpPath);
+        }
+
+        // Load default output directory for settings
+        String savedDefaultOutput = preferencesService.getPreference(PreferencesService.DEFAULT_OUTPUT_DIRECTORY, null);
+        if (savedDefaultOutput != null && defaultOutputField != null) {
+            defaultOutputField.setText(savedDefaultOutput);
+        }
+
+        logger.info("Loaded user preferences");
+    }
+
+    /**
+     * Setup listeners to automatically save preferences when user changes settings
+     */
+    private void setupPreferenceListeners() {
+        // Save output directory when changed
+        outputDirectoryField.textProperty().addListener((obs, oldVal, newVal) -> {
+            if (newVal != null && !newVal.trim().isEmpty()) {
+                preferencesService.setPreference(PreferencesService.OUTPUT_DIRECTORY, newVal);
+                preferencesService.savePreferences();
+            }
+        });
+
+        // Save format preferences when changed
+        audioFormatComboBox.valueProperty().addListener((obs, oldVal, newVal) -> {
+            if (newVal != null) {
+                preferencesService.setPreference(PreferencesService.AUDIO_FORMAT, newVal);
+                preferencesService.savePreferences();
+            }
+        });
+
+        videoFormatComboBox.valueProperty().addListener((obs, oldVal, newVal) -> {
+            if (newVal != null) {
+                preferencesService.setPreference(PreferencesService.VIDEO_FORMAT, newVal);
+                preferencesService.savePreferences();
+            }
+        });
+
+        // Save checkbox preferences when changed
+        embedSubtitlesCheckBox.selectedProperty().addListener((obs, oldVal, newVal) -> {
+            preferencesService.setBooleanPreference(PreferencesService.EMBED_SUBTITLES, newVal);
+            preferencesService.savePreferences();
+        });
+
+        embedThumbnailCheckBox.selectedProperty().addListener((obs, oldVal, newVal) -> {
+            preferencesService.setBooleanPreference(PreferencesService.EMBED_THUMBNAIL, newVal);
+            preferencesService.savePreferences();
+        });
+
+        addMetadataCheckBox.selectedProperty().addListener((obs, oldVal, newVal) -> {
+            preferencesService.setBooleanPreference(PreferencesService.ADD_METADATA, newVal);
+            preferencesService.savePreferences();
+        });
+
+        // Save settings tab preferences when changed
+        if (ytDlpPathField != null) {
+            ytDlpPathField.textProperty().addListener((obs, oldVal, newVal) -> {
+                if (newVal != null && !newVal.trim().isEmpty()) {
+                    preferencesService.setPreference(PreferencesService.YTDLP_PATH, newVal);
+                    preferencesService.savePreferences();
+                }
+            });
+        }
+
+        if (defaultOutputField != null) {
+            defaultOutputField.textProperty().addListener((obs, oldVal, newVal) -> {
+                if (newVal != null && !newVal.trim().isEmpty()) {
+                    preferencesService.setPreference(PreferencesService.DEFAULT_OUTPUT_DIRECTORY, newVal);
+                    preferencesService.savePreferences();
+                }
+            });
+        }
+    }
+
+    /**
+     * Save download type preference
+     */
+    private void saveDownloadTypePreference() {
+        boolean isAudioMode = audioRadioButton.isSelected();
+        preferencesService.setBooleanPreference(PreferencesService.DOWNLOAD_TYPE_AUDIO, isAudioMode);
+        preferencesService.savePreferences();
+    }
+
     @FXML
     private void browseOutputDirectory() {
         DirectoryChooser directoryChooser = new DirectoryChooser();
         directoryChooser.setTitle("Select Output Directory");
-        directoryChooser.setInitialDirectory(new File(outputDirectoryField.getText()));
+        
+        // Set initial directory to current output directory if it exists
+        String currentPath = outputDirectoryField.getText();
+        if (currentPath != null && !currentPath.trim().isEmpty()) {
+            File currentDir = new File(currentPath);
+            if (currentDir.exists() && currentDir.isDirectory()) {
+                directoryChooser.setInitialDirectory(currentDir);
+            }
+        }
 
         File selectedDirectory = directoryChooser.showDialog(browseOutputButton.getScene().getWindow());
         if (selectedDirectory != null) {
             outputDirectoryField.setText(selectedDirectory.getAbsolutePath());
+            // Preference will be saved automatically by the listener
         }
     }
 
