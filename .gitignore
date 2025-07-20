@@ -25,6 +25,9 @@ buildNumber.properties
 hs_err_pid*
 replay_pid*
 
+# Application runtime data
+hvd-preferences.properties
+
 # IDE - IntelliJ IDEA
 .idea/
 *.iws
