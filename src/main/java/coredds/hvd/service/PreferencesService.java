@@ -118,6 +118,7 @@ public class PreferencesService {
     // Preference keys constants
     public static final String OUTPUT_DIRECTORY = "output.directory";
     public static final String AUDIO_FORMAT = "audio.format";
+    public static final String VIDEO_QUALITY = "video.quality";
     public static final String VIDEO_FORMAT = "video.format";
     public static final String DOWNLOAD_TYPE_AUDIO = "download.type.audio";
     public static final String EMBED_SUBTITLES = "embed.subtitles";

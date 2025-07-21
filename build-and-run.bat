@@ -26,12 +26,12 @@ echo Building JAR with dependencies...
 call mvn clean package -q
 
 REM Check if build was successful
-if not exist "target\hvd-1.0.0.jar" (
+if not exist "target\hvd-1.0.0.2.jar" (
     echo Error: JAR file not found. Build may have failed.
     exit /b 1
 )
 
-echo Build successful! JAR created: target\hvd-1.0.0.jar
+echo Build successful! JAR created: target\hvd-1.0.0.2.jar
 
 REM Find JavaFX JARs in the local repository
 set JAVAFX_VERSION=21.0.1
@@ -45,7 +45,7 @@ set MODULE_PATH=%MODULE_PATH%;%JAVAFX_PATH%\javafx-graphics\%JAVAFX_VERSION%\jav
 set MODULE_PATH=%MODULE_PATH%;%JAVAFX_PATH%\javafx-base\%JAVAFX_VERSION%\javafx-base-%JAVAFX_VERSION%-win.jar
 
 REM Create classpath for application dependencies
-set CLASSPATH=target\hvd-1.0.0.jar
+set CLASSPATH=target\hvd-1.0.0.2.jar
 set CLASSPATH=%CLASSPATH%;%M2_REPO%\ch\qos\logback\logback-classic\1.4.8\logback-classic-1.4.8.jar
 set CLASSPATH=%CLASSPATH%;%M2_REPO%\ch\qos\logback\logback-core\1.4.8\logback-core-1.4.8.jar
 set CLASSPATH=%CLASSPATH%;%M2_REPO%\com\fasterxml\jackson\core\jackson-databind\2.15.2\jackson-databind-2.15.2.jar

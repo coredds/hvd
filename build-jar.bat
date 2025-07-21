@@ -12,11 +12,11 @@ echo Building JAR with dependencies...
 call mvn clean package -q
 
 REM Check if build was successful
-if not exist "target\hvd-1.0.0.jar" (
+if not exist "target\hvd-1.0.0.2.jar" (
     echo Error: JAR file not found. Build may have failed.
     exit /b 1
 )
 
-echo Build successful! JAR created: target\hvd-1.0.0.jar
+echo Build successful! JAR created: target\hvd-1.0.0.2.jar
 echo To run the application, use: build-and-run.bat
 pause 

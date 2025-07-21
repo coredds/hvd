@@ -42,6 +42,33 @@ scoop install yt-dlp
 - Download `yt-dlp.exe` from [GitHub Releases](https://github.com/yt-dlp/yt-dlp/releases)
 - Place it in a folder that's in your PATH (e.g., `C:\Windows`)
 
+### 4. FFmpeg Installation (Required for Advanced Features)
+
+FFmpeg is required for embedding thumbnails, format conversion, and subtitle embedding.
+
+#### Option A: Windows Package Manager (Recommended)
+```cmd
+winget install ffmpeg
+```
+
+#### Option B: Chocolatey
+```cmd
+choco install ffmpeg
+```
+
+#### Option C: Scoop
+```cmd
+scoop install ffmpeg
+```
+
+#### Option D: Direct Download
+1. Download FFmpeg from [FFmpeg.org](https://ffmpeg.org/download.html#build-windows)
+2. Extract to a folder (e.g., `C:\ffmpeg`)
+3. Add the `bin` directory to your PATH environment variable (e.g., `C:\ffmpeg\bin`)
+4. Verify installation: `ffmpeg -version`
+
+> **Note:** Without FFmpeg, you can still download videos and audio, but features like thumbnail embedding will not work.
+
 ## Building and Running
 
 ### Quick Start

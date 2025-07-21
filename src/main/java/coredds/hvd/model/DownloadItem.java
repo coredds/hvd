@@ -30,6 +30,7 @@ public class DownloadItem {
     private final DoubleProperty progress = new SimpleDoubleProperty(0.0);
     private final StringProperty errorMessage = new SimpleStringProperty();
     private final StringProperty filePath = new SimpleStringProperty();
+    private boolean noPlaylist = false;
 
     public DownloadItem() {
         // Default constructor
@@ -136,5 +137,14 @@ public class DownloadItem {
 
     public void setFilePath(String filePath) {
         this.filePath.set(filePath);
+    }
+
+    // NoPlaylist property
+    public boolean isNoPlaylist() {
+        return noPlaylist;
+    }
+
+    public void setNoPlaylist(boolean noPlaylist) {
+        this.noPlaylist = noPlaylist;
     }
 }

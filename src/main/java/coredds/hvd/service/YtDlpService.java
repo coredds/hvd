@@ -10,8 +10,11 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -24,6 +27,7 @@ public class YtDlpService {
 
     private String ytDlpPath = "yt-dlp"; // Default, can be configured
     private String outputDirectory = System.getProperty("user.home") + File.separator + "Downloads";
+    private final Set<Process> activeProcesses = Collections.newSetFromMap(new ConcurrentHashMap<>());
 
     public YtDlpService() {
         // Default constructor - detection will happen later in a background thread
@@ -58,6 +62,21 @@ public class YtDlpService {
         }
 
         return false;
+    }
+    
+    /**
+     * Test if FFmpeg is available (required for thumbnail embedding and other features)
+     */
+    public boolean isFFmpegAvailable() {
+        try {
+            ProcessBuilder pb = new ProcessBuilder("ffmpeg", "-version");
+            Process process = pb.start();
+            int exitCode = process.waitFor();
+            return exitCode == 0;
+        } catch (IOException | InterruptedException e) {
+            logger.debug("FFmpeg not available", e);
+            return false;
+        }
     }
 
     /**
@@ -179,30 +198,42 @@ public class YtDlpService {
     /**
      * Create a download task for a given download item
      */
-    public Task<Void> createDownloadTask(DownloadItem item, boolean audioOnly, String audioFormat, String videoFormat,
+    public Task<Void> createDownloadTask(DownloadItem item, boolean audioOnly, String audioFormat, String videoQuality, String videoFormat,
             boolean embedSubtitles, boolean embedThumbnail,
             boolean addMetadata, Consumer<String> logConsumer) {
         return new Task<Void>() {
             @Override
             protected Void call() throws Exception {
-                List<String> command = buildCommand(item, audioOnly, audioFormat, videoFormat, embedSubtitles,
+                List<String> command = buildCommand(item, audioOnly, audioFormat, videoQuality, videoFormat, embedSubtitles,
                         embedThumbnail, addMetadata);
 
                 logger.info("Starting download for: " + item.getUrl());
                 logger.info("Command: " + String.join(" ", command));
 
                 ProcessBuilder pb = new ProcessBuilder(command);
-                pb.directory(new java.io.File(outputDirectory));
+                // Don't set working directory to avoid PATH issues
                 pb.redirectErrorStream(true);
 
                 Process process = pb.start();
+                
+                // Track the process for cleanup
+                activeProcesses.add(process);
+                
+                // Ensure process is alive
+                if (!process.isAlive()) {
+                    logger.error("Process failed to start");
+                    activeProcesses.remove(process);
+                    throw new RuntimeException("Failed to start yt-dlp process");
+                }
 
                 try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
                     String line;
                     String downloadedFilePath = null;
+                    boolean receivedOutput = false;
 
                     while ((line = reader.readLine()) != null && !isCancelled()) {
                         final String logLine = line;
+                        receivedOutput = true;
 
                         // Update progress if we can parse it
                         Matcher progressMatcher = PROGRESS_PATTERN.matcher(line);
@@ -211,7 +242,7 @@ public class YtDlpService {
                                 double progress = Double.parseDouble(progressMatcher.group(1)) / 100.0;
                                 javafx.application.Platform.runLater(() -> item.setProgress(progress));
                             } catch (NumberFormatException e) {
-                                // Ignore parsing errors
+                                logger.warn("Failed to parse progress from: {}", line);
                             }
                         }
 
@@ -219,12 +250,26 @@ public class YtDlpService {
                         Matcher destMatcher = DESTINATION_PATTERN.matcher(line);
                         if (destMatcher.find()) {
                             downloadedFilePath = destMatcher.group(1);
+                            logger.debug("Found destination: {}", downloadedFilePath);
                         }
 
                         // Send log to consumer
                         if (logConsumer != null) {
                             javafx.application.Platform.runLater(() -> logConsumer.accept(logLine));
                         }
+                        
+                        // Yield to allow UI updates
+                        Thread.yield();
+                    }
+                    
+                    // If task was cancelled, force kill the process
+                    if (isCancelled() && process.isAlive()) {
+                        logger.info("Task cancelled - killing yt-dlp process");
+                        process.destroyForcibly();
+                    }
+                    
+                    if (!receivedOutput) {
+                        logger.warn("No output received from yt-dlp process");
                     }
 
                     // Store the file path for completed download
@@ -236,11 +281,17 @@ public class YtDlpService {
 
                 int exitCode = process.waitFor();
 
+                // Remove process from active set when done
+                activeProcesses.remove(process);
+
                 if (exitCode == 0) {
                     javafx.application.Platform.runLater(() -> {
                         item.setStatus(DownloadItem.Status.COMPLETED);
                         item.setProgress(1.0);
                     });
+                } else if (isCancelled()) {
+                    // Task was cancelled, don't update status (will be set to PAUSED by controller)
+                    logger.info("Download task was cancelled for: {}", item.getUrl());
                 } else {
                     javafx.application.Platform.runLater(() -> {
                         item.setStatus(DownloadItem.Status.ERROR);
@@ -253,7 +304,7 @@ public class YtDlpService {
         };
     }
 
-    private List<String> buildCommand(DownloadItem item, boolean audioOnly, String audioFormat, String videoFormat,
+    private List<String> buildCommand(DownloadItem item, boolean audioOnly, String audioFormat, String videoQuality, String videoFormat,
             boolean embedSubtitles, boolean embedThumbnail, boolean addMetadata) {
         List<String> command = new ArrayList<>();
         command.add(ytDlpPath);
@@ -272,13 +323,12 @@ public class YtDlpService {
         } else {
             // Video format selection
             command.add("-f");
-            if (videoFormat != null && !videoFormat.isEmpty()) {
-                // Handle special format mappings
-                String formatString = mapVideoFormat(videoFormat);
-                command.add(formatString);
-            } else {
-                command.add("bestvideo+bestaudio/best");
+            String formatString = buildVideoFormatString(videoQuality, videoFormat, audioFormat);
+            // Fallback to simple format if complex format is empty or problematic
+            if (formatString == null || formatString.trim().isEmpty()) {
+                formatString = "best";
             }
+            command.add(formatString);
         }
 
         // Subtitle options
@@ -301,6 +351,14 @@ public class YtDlpService {
         command.add("--newline");
         command.add("--progress");
 
+        // Playlist handling
+        if (item.isNoPlaylist()) {
+            command.add("--no-playlist");
+            logger.info("Added --no-playlist flag for single video download");
+        } else {
+            logger.info("Downloading playlist (no --no-playlist flag)");
+        }
+
         // URL
         command.add(item.getUrl());
 
@@ -308,23 +366,105 @@ public class YtDlpService {
     }
 
     /**
-     * Map user-friendly video format names to yt-dlp format strings
+     * Build video format string combining quality, format, and audio preferences
      */
-    private String mapVideoFormat(String videoFormat) {
-        return switch (videoFormat) {
-            case "720p" -> "bestvideo[height<=720]+bestaudio/best[height<=720]";
-            case "1080p" -> "bestvideo[height<=1080]+bestaudio/best[height<=1080]";
-            case "1440p" -> "bestvideo[height<=1440]+bestaudio/best[height<=1440]";
-            case "2160p (4K)" -> "bestvideo[height<=2160]+bestaudio/best[height<=2160]";
-            case "mp4" -> "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]";
-            case "webm" -> "bestvideo[ext=webm]+bestaudio[ext=webm]/best[ext=webm]";
-            case "mkv" -> "bestvideo[ext=mkv]+bestaudio/best[ext=mkv]";
-            case "avi" -> "bestvideo[ext=avi]+bestaudio/best[ext=avi]";
-            case "mov" -> "bestvideo[ext=mov]+bestaudio/best[ext=mov]";
-            case "bestvideo+bestaudio" -> "bestvideo+bestaudio/best";
-            case "worst" -> "worst";
-            case "best" -> "best";
-            default -> videoFormat; // Use the format string as-is for custom formats
+    private String buildVideoFormatString(String videoQuality, String videoFormat, String audioFormat) {
+        
+        String qualityFilter = mapVideoQuality(videoQuality);
+        String formatFilter = mapVideoFormatExtension(videoFormat);
+        String audioFilter = mapAudioFormatExtension(audioFormat);
+        
+        // Use simpler, more reliable format strings
+        if ("Best Available".equals(videoQuality) || videoQuality == null) {
+            if (formatFilter.equals("") && audioFilter.equals("")) {
+                return "best";
+            } else if (formatFilter.equals("")) {
+                return "best" + audioFilter;
+            } else if (audioFilter.equals("")) {
+                return "best" + formatFilter;
+            } else {
+                return "best" + formatFilter + audioFilter;
+            }
+        } else if ("Worst Available".equals(videoQuality)) {
+            if (formatFilter.equals("") && audioFilter.equals("")) {
+                return "worst";
+            } else {
+                return "worst" + formatFilter + audioFilter;
+            }
+        } else {
+            // Combine quality, format, and audio with simpler syntax
+            return "best" + qualityFilter + formatFilter + audioFilter;
+        }
+    }
+    
+    /**
+     * Map video quality to yt-dlp height filter
+     */
+    private String mapVideoQuality(String videoQuality) {
+        return switch (videoQuality) {
+            case "2160p (4K)" -> "[height<=2160]";
+            case "1440p" -> "[height<=1440]";
+            case "1080p" -> "[height<=1080]";
+            case "720p" -> "[height<=720]";
+            case "480p" -> "[height<=480]";
+            case "360p" -> "[height<=360]";
+            case "Worst Available" -> "worst";
+            case "Best Available" -> "best";
+            default -> ""; // No quality filter
         };
+    }
+    
+    /**
+     * Map video format to yt-dlp extension filter
+     */
+    private String mapVideoFormatExtension(String videoFormat) {
+        return switch (videoFormat) {
+            case "mp4" -> "[ext=mp4]";
+            case "webm" -> "[ext=webm]";
+            case "mkv" -> "[ext=mkv]";
+            case "avi" -> "[ext=avi]";
+            case "mov" -> "[ext=mov]";
+            case "Best Format" -> "";
+            default -> ""; // No format filter
+        };
+    }
+    
+    /**
+     * Map audio format to yt-dlp audio codec filter
+     */
+    private String mapAudioFormatExtension(String audioFormat) {
+        if (audioFormat == null || audioFormat.isEmpty()) {
+            return "";
+        }
+        
+        return switch (audioFormat) {
+            case "mp3" -> "[acodec*=mp3]";
+            case "aac" -> "[acodec*=aac]";
+            case "m4a" -> "[acodec*=aac]"; // m4a typically uses AAC
+            case "opus" -> "[acodec*=opus]";
+            case "flac" -> "[acodec*=flac]";
+            case "wav" -> "[acodec*=pcm]"; // WAV typically uses PCM
+            default -> ""; // No audio filter
+        };
+    }
+    
+    /**
+     * Kill all active yt-dlp processes - used during app shutdown
+     */
+    public void killAllActiveProcesses() {
+        logger.info("Killing {} active yt-dlp processes", activeProcesses.size());
+        
+        for (Process process : activeProcesses) {
+            try {
+                if (process.isAlive()) {
+                    process.destroyForcibly();
+                    logger.debug("Killed yt-dlp process: {}", process.pid());
+                }
+            } catch (Exception e) {
+                logger.warn("Failed to kill process: {}", e.getMessage());
+            }
+        }
+        
+        activeProcesses.clear();
     }
 }

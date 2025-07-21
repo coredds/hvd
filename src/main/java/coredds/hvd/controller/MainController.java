@@ -18,6 +18,8 @@ import java.io.File;
 import java.net.URL;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.ResourceBundle;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -35,6 +37,8 @@ public class MainController implements Initializable {
     private RadioButton audioRadioButton;
     @FXML
     private ComboBox<String> audioFormatComboBox;
+    @FXML
+    private ComboBox<String> videoQualityComboBox;
     @FXML
     private ComboBox<String> videoFormatComboBox;
     @FXML
@@ -80,7 +84,11 @@ public class MainController implements Initializable {
     @FXML
     private Button testYtDlpButton;
     @FXML
-    private Label statusLabel;
+    private Button testFFmpegButton;
+    @FXML
+    private Label ytDlpStatusLabel;
+    @FXML
+    private Label ffmpegStatusLabel;
 
     // Logs Tab Controls
     @FXML
@@ -93,6 +101,10 @@ public class MainController implements Initializable {
     private PreferencesService preferencesService;
     private ObservableList<DownloadItem> downloadItems;
     private ExecutorService executorService;
+    private List<Task<Void>> activeTasks;
+    
+    // Flag to prevent saving preferences during initialization
+    private boolean isInitializing = true;
 
     @Override
     public void initialize(URL location, ResourceBundle resources) {
@@ -101,6 +113,7 @@ public class MainController implements Initializable {
         // Initialize services
         executorService = Executors.newCachedThreadPool();
         downloadItems = FXCollections.observableArrayList();
+        activeTasks = new ArrayList<>();
         ytDlpService = new YtDlpService();
         preferencesService = new PreferencesService();
 
@@ -109,23 +122,32 @@ public class MainController implements Initializable {
         videoRadioButton.setToggleGroup(downloadTypeGroup);
         audioRadioButton.setToggleGroup(downloadTypeGroup);
 
-        // Load and apply saved preferences
-        loadPreferences();
-
         // Setup format combo boxes
         audioFormatComboBox.setItems(FXCollections.observableArrayList(
                 "mp3", "aac", "m4a", "opus", "flac", "wav"));
         
+        // Setup video quality combo box (resolution/quality options)
+        videoQualityComboBox.setItems(FXCollections.observableArrayList(
+                "Best Available", "2160p (4K)", "1440p", "1080p", "720p", "480p", "360p", "Worst Available"));
+        
+        // Setup video format combo box (file format/container options)
         videoFormatComboBox.setItems(FXCollections.observableArrayList(
-                "best", "mp4", "webm", "mkv", "avi"));
+                "Best Format", "mp4", "webm", "mkv", "avi", "mov"));
+
+        // Load and apply saved preferences BEFORE setting up listeners
+        loadPreferences();
 
         // Setup combo box visibility based on download type
         downloadTypeGroup.selectedToggleProperty().addListener((obs, oldToggle, newToggle) -> {
             if (newToggle == audioRadioButton) {
+                // Audio Only: Show audio format, hide video controls
                 audioFormatComboBox.setVisible(true);
+                videoQualityComboBox.setVisible(false);
                 videoFormatComboBox.setVisible(false);
             } else {
-                audioFormatComboBox.setVisible(false);
+                // Video: Show ALL controls (video has both video and audio streams)
+                audioFormatComboBox.setVisible(true);
+                videoQualityComboBox.setVisible(true);
                 videoFormatComboBox.setVisible(true);
             }
             // Save download type preference
@@ -152,15 +174,15 @@ public class MainController implements Initializable {
         setupLogsTab();
         
         // Initial status check
-        checkYtDlpStatus();
+        checkDependencyStatus();
+        
+        // Initialization complete - enable preference saving
+        isInitializing = false;
     }
 
     private void setupDownloadsTable() {
 
-        // Setup output directory
-        outputDirectoryField.setText(System.getProperty("user.home") + File.separator + "Downloads");
-
-        // Setup table
+        // Setup table (output directory is handled by loadPreferences())
         setupDownloadTable();
 
         // Setup button actions
@@ -198,6 +220,7 @@ public class MainController implements Initializable {
         browseYtDlpButton.setOnAction(e -> browseYtDlpPath());
         browseDefaultOutputButton.setOnAction(e -> browseDefaultOutput());
         testYtDlpButton.setOnAction(e -> testYtDlp());
+        testFFmpegButton.setOnAction(e -> testFFmpeg());
     }
 
     private void setupLogsTab() {
@@ -235,14 +258,17 @@ public class MainController implements Initializable {
         String savedAudioFormat = preferencesService.getPreference(PreferencesService.AUDIO_FORMAT, "mp3");
         audioFormatComboBox.setValue(savedAudioFormat);
 
-        String savedVideoFormat = preferencesService.getPreference(PreferencesService.VIDEO_FORMAT, "best");
+        String savedVideoQuality = preferencesService.getPreference(PreferencesService.VIDEO_QUALITY, "1080p");
+        videoQualityComboBox.setValue(savedVideoQuality);
+
+        String savedVideoFormat = preferencesService.getPreference(PreferencesService.VIDEO_FORMAT, "Best Format");
         videoFormatComboBox.setValue(savedVideoFormat);
 
         // Load checkbox preferences
         embedSubtitlesCheckBox.setSelected(
             preferencesService.getBooleanPreference(PreferencesService.EMBED_SUBTITLES, false));
         embedThumbnailCheckBox.setSelected(
-            preferencesService.getBooleanPreference(PreferencesService.EMBED_THUMBNAIL, false));
+            preferencesService.getBooleanPreference(PreferencesService.EMBED_THUMBNAIL, true)); // Default to checked
         addMetadataCheckBox.setSelected(
             preferencesService.getBooleanPreference(PreferencesService.ADD_METADATA, false));
 
@@ -267,7 +293,7 @@ public class MainController implements Initializable {
     private void setupPreferenceListeners() {
         // Save output directory when changed
         outputDirectoryField.textProperty().addListener((obs, oldVal, newVal) -> {
-            if (newVal != null && !newVal.trim().isEmpty()) {
+            if (!isInitializing && newVal != null && !newVal.trim().isEmpty()) {
                 preferencesService.setPreference(PreferencesService.OUTPUT_DIRECTORY, newVal);
                 preferencesService.savePreferences();
             }
@@ -275,14 +301,21 @@ public class MainController implements Initializable {
 
         // Save format preferences when changed
         audioFormatComboBox.valueProperty().addListener((obs, oldVal, newVal) -> {
-            if (newVal != null) {
+            if (!isInitializing && newVal != null) {
                 preferencesService.setPreference(PreferencesService.AUDIO_FORMAT, newVal);
                 preferencesService.savePreferences();
             }
         });
 
+        videoQualityComboBox.valueProperty().addListener((obs, oldVal, newVal) -> {
+            if (!isInitializing && newVal != null) {
+                preferencesService.setPreference(PreferencesService.VIDEO_QUALITY, newVal);
+                preferencesService.savePreferences();
+            }
+        });
+
         videoFormatComboBox.valueProperty().addListener((obs, oldVal, newVal) -> {
-            if (newVal != null) {
+            if (!isInitializing && newVal != null) {
                 preferencesService.setPreference(PreferencesService.VIDEO_FORMAT, newVal);
                 preferencesService.savePreferences();
             }
@@ -290,24 +323,30 @@ public class MainController implements Initializable {
 
         // Save checkbox preferences when changed
         embedSubtitlesCheckBox.selectedProperty().addListener((obs, oldVal, newVal) -> {
-            preferencesService.setBooleanPreference(PreferencesService.EMBED_SUBTITLES, newVal);
-            preferencesService.savePreferences();
+            if (!isInitializing) {
+                preferencesService.setBooleanPreference(PreferencesService.EMBED_SUBTITLES, newVal);
+                preferencesService.savePreferences();
+            }
         });
 
         embedThumbnailCheckBox.selectedProperty().addListener((obs, oldVal, newVal) -> {
-            preferencesService.setBooleanPreference(PreferencesService.EMBED_THUMBNAIL, newVal);
-            preferencesService.savePreferences();
+            if (!isInitializing) {
+                preferencesService.setBooleanPreference(PreferencesService.EMBED_THUMBNAIL, newVal);
+                preferencesService.savePreferences();
+            }
         });
 
         addMetadataCheckBox.selectedProperty().addListener((obs, oldVal, newVal) -> {
-            preferencesService.setBooleanPreference(PreferencesService.ADD_METADATA, newVal);
-            preferencesService.savePreferences();
+            if (!isInitializing) {
+                preferencesService.setBooleanPreference(PreferencesService.ADD_METADATA, newVal);
+                preferencesService.savePreferences();
+            }
         });
 
         // Save settings tab preferences when changed
         if (ytDlpPathField != null) {
             ytDlpPathField.textProperty().addListener((obs, oldVal, newVal) -> {
-                if (newVal != null && !newVal.trim().isEmpty()) {
+                if (!isInitializing && newVal != null && !newVal.trim().isEmpty()) {
                     preferencesService.setPreference(PreferencesService.YTDLP_PATH, newVal);
                     preferencesService.savePreferences();
                 }
@@ -316,7 +355,7 @@ public class MainController implements Initializable {
 
         if (defaultOutputField != null) {
             defaultOutputField.textProperty().addListener((obs, oldVal, newVal) -> {
-                if (newVal != null && !newVal.trim().isEmpty()) {
+                if (!isInitializing && newVal != null && !newVal.trim().isEmpty()) {
                     preferencesService.setPreference(PreferencesService.DEFAULT_OUTPUT_DIRECTORY, newVal);
                     preferencesService.savePreferences();
                 }
@@ -328,9 +367,11 @@ public class MainController implements Initializable {
      * Save download type preference
      */
     private void saveDownloadTypePreference() {
-        boolean isAudioMode = audioRadioButton.isSelected();
-        preferencesService.setBooleanPreference(PreferencesService.DOWNLOAD_TYPE_AUDIO, isAudioMode);
-        preferencesService.savePreferences();
+        if (!isInitializing) {
+            boolean isAudioMode = audioRadioButton.isSelected();
+            preferencesService.setBooleanPreference(PreferencesService.DOWNLOAD_TYPE_AUDIO, isAudioMode);
+            preferencesService.savePreferences();
+        }
     }
 
     @FXML
@@ -366,26 +407,81 @@ public class MainController implements Initializable {
         for (String url : urls) {
             url = url.trim();
             if (!url.isEmpty()) {
-                DownloadItem item = new DownloadItem(url);
-
-                // Set format based on selection
-                if (audioRadioButton.isSelected()) {
-                    item.setFormat("audio-" + audioFormatComboBox.getValue());
-                } else {
-                    item.setFormat("video-" + videoFormatComboBox.getValue());
-                }
-
-                downloadItems.add(item);
-
-                // Try to extract title asynchronously
-                ytDlpService.extractVideoInfo(url).thenAccept(title -> {
-                    javafx.application.Platform.runLater(() -> item.setTitle(title));
-                });
+                processUrl(url);
             }
         }
 
         urlTextArea.clear();
         appendLog("Added " + urls.length + " item(s) to queue");
+    }
+
+    private void processUrl(String url) {
+        // Check if this is a playlist URL
+        if (isPlaylistUrl(url)) {
+            logger.info("Playlist URL detected: {}", url);
+            showPlaylistChoiceDialog(url);
+        } else {
+            logger.info("Regular URL detected: {}", url);
+            addSingleUrlToQueue(url, false);
+        }
+    }
+
+    private boolean isPlaylistUrl(String url) {
+        // Check for common playlist URL patterns
+        boolean isPlaylist = url.contains("list=") || 
+               url.contains("&list=") ||
+               url.contains("playlist?") ||
+               url.matches(".*youtube\\.com/playlist.*") ||
+               url.matches(".*youtu\\.be/.*\\?.*list=.*");
+        logger.info("URL pattern check for '{}': isPlaylist = {}", url, isPlaylist);
+        return isPlaylist;
+    }
+
+    private void showPlaylistChoiceDialog(String url) {
+        logger.info("Showing playlist choice dialog for URL: {}", url);
+        Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
+        alert.setTitle("Playlist Detected");
+        alert.setHeaderText("This URL appears to be a playlist or contains playlist information.");
+        alert.setContentText("What would you like to download?");
+
+        ButtonType singleVideoButton = new ButtonType("Single Video Only");
+        ButtonType entirePlaylistButton = new ButtonType("Entire Playlist");
+        ButtonType cancelButton = new ButtonType("Cancel", ButtonBar.ButtonData.CANCEL_CLOSE);
+
+        alert.getButtonTypes().setAll(singleVideoButton, entirePlaylistButton, cancelButton);
+
+        alert.showAndWait().ifPresent(response -> {
+            if (response == singleVideoButton) {
+                addSingleUrlToQueue(url, true); // true = no playlist flag
+                appendLog("User chose: Single Video Only - will add --no-playlist flag");
+            } else if (response == entirePlaylistButton) {
+                addSingleUrlToQueue(url, false); // false = download playlist
+                appendLog("User chose: Entire Playlist - will download all videos");
+            }
+            // Cancel does nothing
+        });
+    }
+
+    private void addSingleUrlToQueue(String url, boolean noPlaylist) {
+        DownloadItem item = new DownloadItem(url);
+        item.setNoPlaylist(noPlaylist);
+        logger.info("Created DownloadItem with noPlaylist flag: {}", noPlaylist);
+
+        // Set format based on selection
+        if (audioRadioButton.isSelected()) {
+            item.setFormat("audio-" + audioFormatComboBox.getValue());
+        } else {
+            String quality = videoQualityComboBox.getValue();
+            String format = videoFormatComboBox.getValue();
+            item.setFormat("video-" + quality + " (" + format + ")");
+        }
+
+        downloadItems.add(item);
+
+        // Try to extract title asynchronously
+        ytDlpService.extractVideoInfo(url).thenAccept(title -> {
+            javafx.application.Platform.runLater(() -> item.setTitle(title));
+        });
     }
 
     @FXML
@@ -395,6 +491,47 @@ public class MainController implements Initializable {
             return;
         }
 
+        // Check for FFmpeg if thumbnail embedding is enabled
+        if (embedThumbnailCheckBox.isSelected()) {
+            Task<Boolean> ffmpegCheckTask = new Task<Boolean>() {
+                @Override
+                protected Boolean call() throws Exception {
+                    return ytDlpService.isFFmpegAvailable();
+                }
+            };
+            
+            ffmpegCheckTask.setOnSucceeded(e -> {
+                boolean ffmpegAvailable = ffmpegCheckTask.getValue();
+                if (!ffmpegAvailable) {
+                    Alert alert = new Alert(Alert.AlertType.WARNING);
+                    alert.setTitle("FFmpeg Not Found");
+                    alert.setHeaderText("Thumbnail embedding requires FFmpeg");
+                    alert.setContentText("FFmpeg is not installed or not found in PATH. " +
+                            "Thumbnail embedding may fail.\n\n" +
+                            "Install FFmpeg from ffmpeg.org or disable thumbnail embedding.\n\n" +
+                            "Continue anyway?");
+                    
+                    ButtonType continueButton = new ButtonType("Continue");
+                    ButtonType cancelButton = new ButtonType("Cancel", ButtonBar.ButtonData.CANCEL_CLOSE);
+                    alert.getButtonTypes().setAll(continueButton, cancelButton);
+                    
+                    alert.showAndWait().ifPresent(response -> {
+                        if (response == continueButton) {
+                            startDownloadsInternal();
+                        }
+                    });
+                } else {
+                    startDownloadsInternal();
+                }
+            });
+            
+            executorService.submit(ffmpegCheckTask);
+        } else {
+            startDownloadsInternal();
+        }
+    }
+    
+    private void startDownloadsInternal() {
         // Update service settings
         ytDlpService.setYtDlpPath(ytDlpPathField.getText());
         ytDlpService.setOutputDirectory(outputDirectoryField.getText());
@@ -408,26 +545,56 @@ public class MainController implements Initializable {
 
     private void startDownload(DownloadItem item) {
         item.setStatus(DownloadItem.Status.DOWNLOADING);
+        
+        logger.info("Starting download for URL: {} with noPlaylist flag: {}", item.getUrl(), item.isNoPlaylist());
 
         boolean audioOnly = audioRadioButton.isSelected();
         String audioFormat = audioFormatComboBox.getValue();
+        String videoQuality = videoQualityComboBox.getValue();
         String videoFormat = videoFormatComboBox.getValue();
 
         Task<Void> downloadTask = ytDlpService.createDownloadTask(
-                item, audioOnly, audioFormat, videoFormat,
+                item, audioOnly, audioFormat, videoQuality, videoFormat,
                 embedSubtitlesCheckBox.isSelected(),
                 embedThumbnailCheckBox.isSelected(),
                 addMetadataCheckBox.isSelected(),
                 this::appendLog);
+
+        // Track the task for pause/cancel functionality
+        activeTasks.add(downloadTask);
+        
+        // Remove task from active list when completed
+        downloadTask.setOnSucceeded(e -> activeTasks.remove(downloadTask));
+        downloadTask.setOnFailed(e -> activeTasks.remove(downloadTask));
+        downloadTask.setOnCancelled(e -> {
+            activeTasks.remove(downloadTask);
+            item.setStatus(DownloadItem.Status.PAUSED);
+        });
 
         executorService.submit(downloadTask);
     }
 
     @FXML
     private void pauseAllDownloads() {
-        // Note: This is a simplified implementation
-        // In a real application, you'd need to manage Task cancellation properly
-        appendLog("Pause functionality not fully implemented in this version");
+        int pausedCount = 0;
+        
+        // Cancel all active download tasks
+        List<Task<Void>> tasksToCancel = new ArrayList<>(activeTasks);
+        for (Task<Void> task : tasksToCancel) {
+            if (!task.isDone()) {
+                task.cancel(true); // Force cancellation
+                pausedCount++;
+            }
+        }
+        
+        // Update UI for downloading items that were cancelled
+        for (DownloadItem item : downloadItems) {
+            if (item.getStatus() == DownloadItem.Status.DOWNLOADING) {
+                item.setStatus(DownloadItem.Status.PAUSED);
+            }
+        }
+        
+        appendLog("Paused " + pausedCount + " active download(s)");
     }
 
     @FXML
@@ -475,37 +642,81 @@ public class MainController implements Initializable {
         testTask.setOnSucceeded(e -> {
             boolean available = testTask.getValue();
             if (available) {
-                statusLabel.setText("yt-dlp is working correctly");
-                statusLabel.setStyle("-fx-text-fill: green;");
+                ytDlpStatusLabel.setText("yt-dlp is working correctly");
+                ytDlpStatusLabel.setStyle("-fx-text-fill: green;");
             } else {
-                statusLabel.setText("yt-dlp not found or not working");
-                statusLabel.setStyle("-fx-text-fill: red;");
+                ytDlpStatusLabel.setText("yt-dlp not found or not working");
+                ytDlpStatusLabel.setStyle("-fx-text-fill: red;");
+            }
+        });
+
+        executorService.submit(testTask);
+    }
+    
+    @FXML
+    private void testFFmpeg() {
+        Task<Boolean> testTask = new Task<Boolean>() {
+            @Override
+            protected Boolean call() throws Exception {
+                return ytDlpService.isFFmpegAvailable();
+            }
+        };
+
+        testTask.setOnSucceeded(e -> {
+            boolean available = testTask.getValue();
+            if (available) {
+                ffmpegStatusLabel.setText("FFmpeg is working correctly");
+                ffmpegStatusLabel.setStyle("-fx-text-fill: green;");
+            } else {
+                ffmpegStatusLabel.setText("FFmpeg not found in PATH");
+                ffmpegStatusLabel.setStyle("-fx-text-fill: red;");
             }
         });
 
         executorService.submit(testTask);
     }
 
-    private void checkYtDlpStatus() {
-        Task<Boolean> checkTask = new Task<Boolean>() {
+    private void checkDependencyStatus() {
+        // Check yt-dlp status
+        Task<Boolean> ytDlpCheckTask = new Task<Boolean>() {
             @Override
             protected Boolean call() throws Exception {
                 return ytDlpService.isYtDlpAvailable();
             }
         };
 
-        checkTask.setOnSucceeded(e -> {
-            boolean available = checkTask.getValue();
+        ytDlpCheckTask.setOnSucceeded(e -> {
+            boolean available = ytDlpCheckTask.getValue();
             if (available) {
-                statusLabel.setText("yt-dlp is available");
-                statusLabel.setStyle("-fx-text-fill: green;");
+                ytDlpStatusLabel.setText("yt-dlp is available");
+                ytDlpStatusLabel.setStyle("-fx-text-fill: green;");
             } else {
-                statusLabel.setText("yt-dlp not found - please install or configure path");
-                statusLabel.setStyle("-fx-text-fill: orange;");
+                ytDlpStatusLabel.setText("yt-dlp not found - please install or configure path");
+                ytDlpStatusLabel.setStyle("-fx-text-fill: red;");
             }
         });
 
-        executorService.submit(checkTask);
+        // Check FFmpeg status  
+        Task<Boolean> ffmpegCheckTask = new Task<Boolean>() {
+            @Override
+            protected Boolean call() throws Exception {
+                return ytDlpService.isFFmpegAvailable();
+            }
+        };
+
+        ffmpegCheckTask.setOnSucceeded(e -> {
+            boolean available = ffmpegCheckTask.getValue();
+            if (available) {
+                ffmpegStatusLabel.setText("FFmpeg is available");
+                ffmpegStatusLabel.setStyle("-fx-text-fill: green;");
+            } else {
+                ffmpegStatusLabel.setText("FFmpeg not found - install for advanced features");
+                ffmpegStatusLabel.setStyle("-fx-text-fill: orange;");
+            }
+        });
+
+        executorService.submit(ytDlpCheckTask);
+        executorService.submit(ffmpegCheckTask);
     }
 
     private void appendLog(String message) {
@@ -523,8 +734,36 @@ public class MainController implements Initializable {
     }
 
     public void shutdown() {
-        if (executorService != null) {
-            executorService.shutdown();
+        logger.info("Shutting down application...");
+        
+        // Cancel all active download tasks
+        if (activeTasks != null) {
+            for (Task<Void> task : activeTasks) {
+                if (!task.isDone()) {
+                    task.cancel(true);
+                }
+            }
+            activeTasks.clear();
         }
+        
+        // Kill all yt-dlp processes
+        if (ytDlpService != null) {
+            ytDlpService.killAllActiveProcesses();
+        }
+        
+        // Shutdown executor
+        if (executorService != null) {
+            executorService.shutdownNow(); // Force shutdown instead of graceful
+            try {
+                if (!executorService.awaitTermination(2, java.util.concurrent.TimeUnit.SECONDS)) {
+                    logger.warn("Executor did not terminate gracefully");
+                }
+            } catch (InterruptedException e) {
+                logger.warn("Interrupted while waiting for executor shutdown");
+                Thread.currentThread().interrupt();
+            }
+        }
+        
+        logger.info("Application shutdown complete");
     }
 }

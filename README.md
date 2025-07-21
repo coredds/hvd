@@ -34,6 +34,12 @@ A modern JavaFX-based media downloader built on [yt-dlp](https://github.com/yt-d
    - Install via pip: `pip install yt-dlp`
    - Or download from [GitHub releases](https://github.com/yt-dlp/yt-dlp/releases)
 
+4. **FFmpeg (Required for advanced features)**
+   - **Windows**: Download from [FFmpeg.org](https://ffmpeg.org/download.html) or install via `winget install ffmpeg`
+   - **macOS**: Install via Homebrew: `brew install ffmpeg`
+   - **Linux**: Install via package manager: `sudo apt install ffmpeg` (Ubuntu/Debian) or `sudo yum install ffmpeg` (RHEL/CentOS)
+   - **Required for**: Embedding thumbnails, format conversion, subtitle embedding
+
 ### Dependencies (automatically handled by Maven)
 
 - **JavaFX 17**: UI framework
@@ -55,7 +61,28 @@ pip3 install yt-dlp
 yt-dlp --version
 ```
 
-### 2. Clone and Build the Application
+### 2. Install FFmpeg (Required for Advanced Features)
+
+```bash
+# Windows (using winget)
+winget install ffmpeg
+
+# macOS (using Homebrew)
+brew install ffmpeg
+
+# Ubuntu/Debian
+sudo apt install ffmpeg
+
+# RHEL/CentOS/Fedora
+sudo dnf install ffmpeg
+
+# Verify installation
+ffmpeg -version
+```
+
+> **⚠️ Important:** FFmpeg is required for embedding thumbnails, subtitle embedding, and format conversion. The application will warn you if FFmpeg is missing when you try to use these features.
+
+### 3. Clone and Build the Application
 
 ```bash
 # Clone the repository
@@ -69,7 +96,7 @@ mvn clean compile
 mvn javafx:run
 ```
 
-### 3. Alternative: Create an Executable JAR
+### 4. Alternative: Create an Executable JAR
 
 ```bash
 # Create a JAR with dependencies
