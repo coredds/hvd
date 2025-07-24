@@ -404,15 +404,27 @@ public class MainController implements Initializable {
         }
 
         String[] urls = urlText.split("\n");
+        int initialCount = downloadItems.size();
+        int processedUrls = 0;
+        
         for (String url : urls) {
             url = url.trim();
             if (!url.isEmpty()) {
                 processUrl(url);
+                processedUrls++;
             }
         }
 
+        int actuallyAdded = downloadItems.size() - initialCount;
+        int skipped = processedUrls - actuallyAdded;
+        
         urlTextArea.clear();
-        appendLog("Added " + urls.length + " item(s) to queue");
+        
+        if (skipped > 0) {
+            appendLog("Processed " + processedUrls + " URL(s): " + actuallyAdded + " added, " + skipped + " skipped (duplicates/completed)");
+        } else {
+            appendLog("Added " + actuallyAdded + " new item(s) to queue");
+        }
     }
 
     private void processUrl(String url) {
@@ -463,6 +475,24 @@ public class MainController implements Initializable {
     }
 
     private void addSingleUrlToQueue(String url, boolean noPlaylist) {
+        // Check if URL already exists in the download list
+        DownloadItem existingItem = findExistingDownloadItem(url);
+        
+        if (existingItem != null) {
+            if (existingItem.getStatus() == DownloadItem.Status.COMPLETED) {
+                // Skip completed downloads
+                appendLog("Skipping '" + url + "' - already completed (100%)");
+                logger.info("Skipped adding URL to queue - already completed: {}", url);
+                return;
+            } else {
+                // URL exists but not completed - log the status
+                appendLog("URL '" + url + "' already in queue with status: " + existingItem.getStatus());
+                logger.info("URL already in queue with status {}: {}", existingItem.getStatus(), url);
+                return;
+            }
+        }
+        
+        // URL doesn't exist or is not completed, add it to queue
         DownloadItem item = new DownloadItem(url);
         item.setNoPlaylist(noPlaylist);
         logger.info("Created DownloadItem with noPlaylist flag: {}", noPlaylist);
@@ -482,6 +512,18 @@ public class MainController implements Initializable {
         ytDlpService.extractVideoInfo(url).thenAccept(title -> {
             javafx.application.Platform.runLater(() -> item.setTitle(title));
         });
+    }
+    
+    /**
+     * Find an existing download item by URL
+     * @param url The URL to search for
+     * @return The existing DownloadItem if found, null otherwise
+     */
+    private DownloadItem findExistingDownloadItem(String url) {
+        return downloadItems.stream()
+                .filter(item -> item.getUrl().equals(url))
+                .findFirst()
+                .orElse(null);
     }
 
     @FXML
@@ -536,10 +578,26 @@ public class MainController implements Initializable {
         ytDlpService.setYtDlpPath(ytDlpPathField.getText());
         ytDlpService.setOutputDirectory(outputDirectoryField.getText());
 
+        int queuedCount = 0;
+        int skippedCount = 0;
+        
         for (DownloadItem item : downloadItems) {
             if (item.getStatus() == DownloadItem.Status.QUEUED) {
                 startDownload(item);
+                queuedCount++;
+            } else {
+                skippedCount++;
+                if (item.getStatus() == DownloadItem.Status.COMPLETED) {
+                    logger.debug("Skipping completed download: {}", item.getUrl());
+                }
             }
+        }
+        
+        if (queuedCount > 0) {
+            appendLog("Started " + queuedCount + " download(s)" + 
+                      (skippedCount > 0 ? " (skipped " + skippedCount + " completed/active items)" : ""));
+        } else if (skippedCount > 0) {
+            appendLog("No new downloads to start - all " + skippedCount + " items are already completed or active");
         }
     }
 

@@ -7,7 +7,7 @@
 <VBox xmlns="http://javafx.com/javafx/11.0.1" xmlns:fx="http://javafx.com/fxml/1" fx:controller="coredds.hvd.controller.MainController">
    <children>
 
-      <TabPane prefHeight="650.0" prefWidth="800.0" tabClosingPolicy="UNAVAILABLE">
+      <TabPane prefHeight="750.0" prefWidth="800.0" tabClosingPolicy="UNAVAILABLE">
          <!-- Downloads Tab -->
          <Tab text="Downloads">
             <content>
@@ -20,13 +20,13 @@
                      <VBox spacing="5.0">
                         <children>
                            <Label text="Video URLs (one per line):" />
-                           <TextArea fx:id="urlTextArea" prefHeight="50.0" promptText="Enter video URLs here..." />
+                           <TextArea fx:id="urlTextArea" prefHeight="40.0" promptText="Enter video URLs here..." />
                            <Button fx:id="addToQueueButton" text="Add to Queue" />
                         </children>
                      </VBox>
                      
                      <!-- Download Options Section -->
-                     <TitledPane collapsible="true" text="Download Options">
+                     <TitledPane collapsible="true" expanded="false" text="Download Options">
                         <content>
                            <VBox spacing="10.0">
                               <padding>
@@ -103,7 +103,7 @@
                            </HBox>
                            
                            <!-- Download Table -->
-                           <TableView fx:id="downloadTable" VBox.vgrow="ALWAYS">
+                           <TableView fx:id="downloadTable" minHeight="200.0" prefHeight="200.0" VBox.vgrow="ALWAYS">
                               <columns>
                                  <TableColumn fx:id="urlColumn" prefWidth="180.0" text="URL" />
                                  <TableColumn fx:id="titleColumn" prefWidth="240.0" text="Title" />

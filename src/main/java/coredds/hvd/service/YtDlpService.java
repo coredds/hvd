@@ -323,12 +323,19 @@ public class YtDlpService {
         } else {
             // Video format selection
             command.add("-f");
-            String formatString = buildVideoFormatString(videoQuality, videoFormat, audioFormat);
+            String formatString = buildVideoFormatString(videoQuality, videoFormat);
             // Fallback to simple format if complex format is empty or problematic
             if (formatString == null || formatString.trim().isEmpty()) {
                 formatString = "best";
             }
             command.add(formatString);
+            
+            // If user has selected a specific audio format for video downloads, 
+            // use post-processing to ensure audio is in the desired format
+            if (audioFormat != null && !audioFormat.isEmpty()) {
+                command.add("--audio-format");
+                command.add(audioFormat);
+            }
         }
 
         // Subtitle options
@@ -366,35 +373,44 @@ public class YtDlpService {
     }
 
     /**
-     * Build video format string combining quality, format, and audio preferences
+     * Build video format string combining quality and format preferences
      */
-    private String buildVideoFormatString(String videoQuality, String videoFormat, String audioFormat) {
+    private String buildVideoFormatString(String videoQuality, String videoFormat) {
         
         String qualityFilter = mapVideoQuality(videoQuality);
         String formatFilter = mapVideoFormatExtension(videoFormat);
-        String audioFilter = mapAudioFormatExtension(audioFormat);
         
-        // Use simpler, more reliable format strings
+        // Build format string with fallbacks for better compatibility
+        StringBuilder formatString = new StringBuilder();
+        
         if ("Best Available".equals(videoQuality) || videoQuality == null) {
-            if (formatFilter.equals("") && audioFilter.equals("")) {
-                return "best";
-            } else if (formatFilter.equals("")) {
-                return "best" + audioFilter;
-            } else if (audioFilter.equals("")) {
-                return "best" + formatFilter;
+            if (formatFilter.equals("")) {
+                formatString.append("best");
             } else {
-                return "best" + formatFilter + audioFilter;
+                // Try specific format first, fallback to best
+                formatString.append("best").append(formatFilter).append("/best");
             }
         } else if ("Worst Available".equals(videoQuality)) {
-            if (formatFilter.equals("") && audioFilter.equals("")) {
-                return "worst";
+            if (formatFilter.equals("")) {
+                formatString.append("worst");
             } else {
-                return "worst" + formatFilter + audioFilter;
+                // Try specific format first, fallback to worst
+                formatString.append("worst").append(formatFilter).append("/worst");
             }
         } else {
-            // Combine quality, format, and audio with simpler syntax
-            return "best" + qualityFilter + formatFilter + audioFilter;
+            // Quality-specific format with fallbacks
+            if (formatFilter.equals("")) {
+                // Try quality-specific, fallback to best
+                formatString.append("best").append(qualityFilter).append("/best");
+            } else {
+                // Try quality + format, fallback to quality only, fallback to best
+                formatString.append("best").append(qualityFilter).append(formatFilter)
+                          .append("/best").append(qualityFilter)
+                          .append("/best");
+            }
         }
+        
+        return formatString.toString();
     }
     
     /**
@@ -428,25 +444,7 @@ public class YtDlpService {
             default -> ""; // No format filter
         };
     }
-    
-    /**
-     * Map audio format to yt-dlp audio codec filter
-     */
-    private String mapAudioFormatExtension(String audioFormat) {
-        if (audioFormat == null || audioFormat.isEmpty()) {
-            return "";
-        }
-        
-        return switch (audioFormat) {
-            case "mp3" -> "[acodec*=mp3]";
-            case "aac" -> "[acodec*=aac]";
-            case "m4a" -> "[acodec*=aac]"; // m4a typically uses AAC
-            case "opus" -> "[acodec*=opus]";
-            case "flac" -> "[acodec*=flac]";
-            case "wav" -> "[acodec*=pcm]"; // WAV typically uses PCM
-            default -> ""; // No audio filter
-        };
-    }
+
     
     /**
      * Kill all active yt-dlp processes - used during app shutdown

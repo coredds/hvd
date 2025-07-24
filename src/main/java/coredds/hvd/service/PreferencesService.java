@@ -49,7 +49,7 @@ public class PreferencesService {
      */
     public void savePreferences() {
         try (FileOutputStream fos = new FileOutputStream(preferencesFile)) {
-            preferences.store(fos, "hvd Media Downloader Preferences");
+            preferences.store(fos, "Holyrics Video Downloader Preferences");
             logger.debug("Saved preferences to: {}", preferencesFile.getAbsolutePath());
         } catch (IOException e) {
             logger.error("Failed to save preferences: {}", e.getMessage());

@@ -29,7 +29,7 @@ public class HvdApplication extends Application {
         scene.getStylesheets().add(getClass().getResource("/css/styles.css").toExternalForm());
 
         // Set window title
-        stage.setTitle("Media Downloader");
+        stage.setTitle("Holyrics Video Downloader");
         
         // Set application icons
         stage.getIcons().addAll(

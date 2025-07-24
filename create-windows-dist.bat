@@ -69,29 +69,34 @@ echo WshShell.Run javaCmd, 0, false
 REM Create README for distribution
 echo Creating README...
 (
-echo hvd Media Downloader - Windows Distribution
-echo ==========================================
+echo Holyrics Video Downloader - Windows Distribution
+echo ===============================================
 echo.
 echo Requirements:
 echo - Java 17 or higher
 echo - yt-dlp installed and accessible from PATH
 echo.
 echo To run ^(choose one^):
-echo 1. RECOMMENDED: Double-click hvd.vbs ^(silent launch, no console window^)
-echo 2. Alternative: Double-click hvd.bat ^(shows brief console window^)
+echo 1. RECOMMENDED: Double-click "Holyrics Video Downloader.lnk" ^(desktop shortcut with icon^)
+echo 2. Alternative: Double-click hvd.vbs ^(silent launch, no console window^)
+echo 3. Troubleshooting: Double-click hvd.bat ^(shows console output^)
 echo.
 echo Files included:
-echo - hvd-1.0.0.2.jar  ^(Main application^)
-echo - lib\             ^(Dependencies^)
-echo - hvd.vbs          ^(Silent launcher - RECOMMENDED^)
-echo - hvd.bat          ^(Console launcher^)
-echo - icons\           ^(Application icons^)
+echo - Holyrics Video Downloader.lnk  ^(Desktop shortcut - RECOMMENDED^)
+echo - hvd-1.0.0.2.jar               ^(Main application^)
+echo - lib\                          ^(Dependencies^)
+echo - hvd.vbs                       ^(Silent launcher^)
+echo - hvd.bat                       ^(Console launcher^)
+echo - 256.ico                       ^(Application icon^)
+echo - icons\                        ^(Additional icons^)
 echo.
-echo For yt-dlp installation:
-echo pip install yt-dlp
+echo Installation:
+echo 1. Extract this folder to your desired location
+echo 2. Copy "Holyrics Video Downloader.lnk" to your Desktop ^(optional^)
+echo 3. Install yt-dlp: pip install yt-dlp
 echo.
 echo Troubleshooting:
-echo - If hvd.vbs doesn't work, try hvd.bat
+echo - If shortcut doesn't work, try hvd.vbs directly
 echo - If you see Java errors, ensure Java 17+ is installed
 echo - Settings are saved in hvd-preferences.properties
 echo.
@@ -103,7 +108,12 @@ echo Copying icons...
 if exist "src\main\resources\icons" (
     mkdir "dist\icons"
     copy "src\main\resources\icons\*.png" "dist\icons\" >nul 2>&1
+    copy "src\main\resources\icons\256.ico" "dist\" >nul 2>&1
 )
+
+REM Create professional shortcut with icon
+echo Creating application shortcut...
+powershell -Command "$WScriptShell = New-Object -ComObject WScript.Shell; $Shortcut = $WScriptShell.CreateShortcut('%CD%\dist\Holyrics Video Downloader.lnk'); $Shortcut.TargetPath = '%CD%\dist\hvd.vbs'; $Shortcut.WorkingDirectory = '%CD%\dist'; $Shortcut.IconLocation = '%CD%\dist\256.ico'; $Shortcut.Description = 'Holyrics Video Downloader - Download videos and audio from YouTube and other platforms'; $Shortcut.Save()"
 
 echo.
 echo ✓ Windows distribution created in 'dist' folder
@@ -111,7 +121,11 @@ echo.
 echo Contents:
 dir /b "dist"
 echo.
-echo To distribute: zip the 'dist' folder and send to users
-echo Users can unzip and double-click 'hvd.bat' to run
+echo ✓ Professional shortcut created: "Holyrics Video Downloader.lnk"
+echo.
+echo To distribute: 
+echo 1. Zip the 'dist' folder and send to users
+echo 2. Users can extract and double-click the shortcut to run
+echo 3. Optionally, users can copy the shortcut to their Desktop
 echo.
 pause 
