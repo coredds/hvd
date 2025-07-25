@@ -3,6 +3,7 @@ package coredds.hvd.controller;
 import coredds.hvd.model.DownloadItem;
 import coredds.hvd.service.YtDlpService;
 import coredds.hvd.service.PreferencesService;
+import javafx.application.Platform;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.concurrent.Task;
@@ -89,12 +90,20 @@ public class MainController implements Initializable {
     private Label ytDlpStatusLabel;
     @FXML
     private Label ffmpegStatusLabel;
+    @FXML
+    private ComboBox<String> languageComboBox;
 
     // Logs Tab Controls
     @FXML
     private TextArea logTextArea;
     @FXML
     private Button clearLogsButton;
+    
+    // Status Bar Controls
+    @FXML
+    private Label statusLabel;
+    @FXML
+    private ProgressIndicator statusProgressIndicator;
 
     // Services and Data
     private YtDlpService ytDlpService;
@@ -102,6 +111,7 @@ public class MainController implements Initializable {
     private ObservableList<DownloadItem> downloadItems;
     private ExecutorService executorService;
     private List<Task<Void>> activeTasks;
+    private ResourceBundle bundle;
     
     // Flag to prevent saving preferences during initialization
     private boolean isInitializing = true;
@@ -109,6 +119,9 @@ public class MainController implements Initializable {
     @Override
     public void initialize(URL location, ResourceBundle resources) {
         logger.info("Initializing MainController");
+        
+        // Store the resource bundle for use in dynamic strings
+        this.bundle = resources;
 
         // Initialize services
         executorService = Executors.newCachedThreadPool();
@@ -128,11 +141,14 @@ public class MainController implements Initializable {
         
         // Setup video quality combo box (resolution/quality options)
         videoQualityComboBox.setItems(FXCollections.observableArrayList(
-                "Best Available", "2160p (4K)", "1440p", "1080p", "720p", "480p", "360p", "Worst Available"));
+                bundle.getString("quality.best"), bundle.getString("quality.4k"), 
+                bundle.getString("quality.1440p"), bundle.getString("quality.1080p"), 
+                bundle.getString("quality.720p"), bundle.getString("quality.480p"), 
+                bundle.getString("quality.360p"), bundle.getString("quality.worst")));
         
         // Setup video format combo box (file format/container options)
         videoFormatComboBox.setItems(FXCollections.observableArrayList(
-                "Best Format", "mp4", "webm", "mkv", "avi", "mov"));
+                bundle.getString("format.best"), "mp4", "webm", "mkv", "avi", "mov"));
 
         // Load and apply saved preferences BEFORE setting up listeners
         loadPreferences();
@@ -172,6 +188,9 @@ public class MainController implements Initializable {
         
         // Setup Logs Tab
         setupLogsTab();
+        
+        // Initialize status bar
+        setStatusReady();
         
         // Initial status check
         checkDependencyStatus();
@@ -216,6 +235,9 @@ public class MainController implements Initializable {
         ytDlpPathField.setText("yt-dlp");
         defaultOutputField.setText(System.getProperty("user.home") + File.separator + "Downloads");
 
+        // Setup language combo box
+        setupLanguageComboBox();
+
         // Setup button actions
         browseYtDlpButton.setOnAction(e -> browseYtDlpPath());
         browseDefaultOutputButton.setOnAction(e -> browseDefaultOutput());
@@ -228,7 +250,7 @@ public class MainController implements Initializable {
         clearLogsButton.setOnAction(e -> logTextArea.clear());
 
         // Add initial log message
-        appendLog("Application started");
+        appendLog(bundle.getString("log.app.started"));
     }
 
     /**
@@ -258,10 +280,10 @@ public class MainController implements Initializable {
         String savedAudioFormat = preferencesService.getPreference(PreferencesService.AUDIO_FORMAT, "mp3");
         audioFormatComboBox.setValue(savedAudioFormat);
 
-        String savedVideoQuality = preferencesService.getPreference(PreferencesService.VIDEO_QUALITY, "1080p");
+        String savedVideoQuality = preferencesService.getPreference(PreferencesService.VIDEO_QUALITY, bundle.getString("quality.1080p"));
         videoQualityComboBox.setValue(savedVideoQuality);
 
-        String savedVideoFormat = preferencesService.getPreference(PreferencesService.VIDEO_FORMAT, "Best Format");
+        String savedVideoFormat = preferencesService.getPreference(PreferencesService.VIDEO_FORMAT, bundle.getString("format.best"));
         videoFormatComboBox.setValue(savedVideoFormat);
 
         // Load checkbox preferences
@@ -282,6 +304,12 @@ public class MainController implements Initializable {
         String savedDefaultOutput = preferencesService.getPreference(PreferencesService.DEFAULT_OUTPUT_DIRECTORY, null);
         if (savedDefaultOutput != null && defaultOutputField != null) {
             defaultOutputField.setText(savedDefaultOutput);
+        }
+
+        // Load language preference
+        String savedLanguage = preferencesService.getPreference(PreferencesService.LANGUAGE, "auto");
+        if (languageComboBox != null) {
+            setLanguageComboBoxValue(savedLanguage);
         }
 
         logger.info("Loaded user preferences");
@@ -361,6 +389,21 @@ public class MainController implements Initializable {
                 }
             });
         }
+        
+        // Save language preference when changed
+        if (languageComboBox != null) {
+            languageComboBox.valueProperty().addListener((obs, oldVal, newVal) -> {
+                if (!isInitializing && newVal != null) {
+                    String languageCode = getLanguageCodeFromDisplayValue(newVal);
+                    preferencesService.setPreference(PreferencesService.LANGUAGE, languageCode);
+                    preferencesService.savePreferences();
+                    
+                    // Show restart message
+                    showAlert(bundle.getString("alert.information"), 
+                            bundle.getString("settings.language.restart.required"));
+                }
+            });
+        }
     }
 
     /**
@@ -399,7 +442,7 @@ public class MainController implements Initializable {
     private void addToQueue() {
         String urlText = urlTextArea.getText().trim();
         if (urlText.isEmpty()) {
-            showAlert("Error", "Please enter at least one URL");
+            showAlert(bundle.getString("alert.error"), bundle.getString("alert.no.urls"));
             return;
         }
 
@@ -421,9 +464,10 @@ public class MainController implements Initializable {
         urlTextArea.clear();
         
         if (skipped > 0) {
-            appendLog("Processed " + processedUrls + " URL(s): " + actuallyAdded + " added, " + skipped + " skipped (duplicates/completed)");
+            appendLog(java.text.MessageFormat.format(bundle.getString("log.urls.processed"), 
+                    processedUrls, actuallyAdded, skipped));
         } else {
-            appendLog("Added " + actuallyAdded + " new item(s) to queue");
+            appendLog(java.text.MessageFormat.format(bundle.getString("log.items.added"), actuallyAdded));
         }
     }
 
@@ -452,23 +496,23 @@ public class MainController implements Initializable {
     private void showPlaylistChoiceDialog(String url) {
         logger.info("Showing playlist choice dialog for URL: {}", url);
         Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
-        alert.setTitle("Playlist Detected");
-        alert.setHeaderText("This URL appears to be a playlist or contains playlist information.");
-        alert.setContentText("What would you like to download?");
+        alert.setTitle(bundle.getString("alert.playlist.detected"));
+        alert.setHeaderText(bundle.getString("alert.playlist.header"));
+        alert.setContentText(bundle.getString("alert.playlist.content"));
 
-        ButtonType singleVideoButton = new ButtonType("Single Video Only");
-        ButtonType entirePlaylistButton = new ButtonType("Entire Playlist");
-        ButtonType cancelButton = new ButtonType("Cancel", ButtonBar.ButtonData.CANCEL_CLOSE);
+        ButtonType singleVideoButton = new ButtonType(bundle.getString("alert.playlist.single"));
+        ButtonType entirePlaylistButton = new ButtonType(bundle.getString("alert.playlist.entire"));
+        ButtonType cancelButton = new ButtonType(bundle.getString("alert.playlist.cancel"), ButtonBar.ButtonData.CANCEL_CLOSE);
 
         alert.getButtonTypes().setAll(singleVideoButton, entirePlaylistButton, cancelButton);
 
         alert.showAndWait().ifPresent(response -> {
             if (response == singleVideoButton) {
                 addSingleUrlToQueue(url, true); // true = no playlist flag
-                appendLog("User chose: Single Video Only - will add --no-playlist flag");
+                appendLog(bundle.getString("log.playlist.single.chosen"));
             } else if (response == entirePlaylistButton) {
                 addSingleUrlToQueue(url, false); // false = download playlist
-                appendLog("User chose: Entire Playlist - will download all videos");
+                appendLog(bundle.getString("log.playlist.entire.chosen"));
             }
             // Cancel does nothing
         });
@@ -481,12 +525,13 @@ public class MainController implements Initializable {
         if (existingItem != null) {
             if (existingItem.getStatus() == DownloadItem.Status.COMPLETED) {
                 // Skip completed downloads
-                appendLog("Skipping '" + url + "' - already completed (100%)");
+                appendLog(java.text.MessageFormat.format(bundle.getString("log.url.skipped.completed"), url));
                 logger.info("Skipped adding URL to queue - already completed: {}", url);
                 return;
             } else {
                 // URL exists but not completed - log the status
-                appendLog("URL '" + url + "' already in queue with status: " + existingItem.getStatus());
+                appendLog(java.text.MessageFormat.format(bundle.getString("log.url.already.queued"), 
+                        url, existingItem.getStatus()));
                 logger.info("URL already in queue with status {}: {}", existingItem.getStatus(), url);
                 return;
             }
@@ -508,9 +553,18 @@ public class MainController implements Initializable {
 
         downloadItems.add(item);
 
-        // Try to extract title asynchronously
+        // Update status and extract title asynchronously
+        updateStatus("status.extracting.title", true);
         ytDlpService.extractVideoInfo(url).thenAccept(title -> {
-            javafx.application.Platform.runLater(() -> item.setTitle(title));
+            Platform.runLater(() -> {
+                item.setTitle(title);
+                setStatusReady(); // Reset status after title extraction
+            });
+        }).exceptionally(throwable -> {
+            Platform.runLater(() -> {
+                setStatusReady(); // Reset status even on error
+            });
+            return null;
         });
     }
     
@@ -529,7 +583,7 @@ public class MainController implements Initializable {
     @FXML
     private void startAllDownloads() {
         if (downloadItems.isEmpty()) {
-            showAlert("Information", "No items in download queue");
+            showAlert(bundle.getString("alert.information"), bundle.getString("alert.no.items"));
             return;
         }
 
@@ -546,15 +600,12 @@ public class MainController implements Initializable {
                 boolean ffmpegAvailable = ffmpegCheckTask.getValue();
                 if (!ffmpegAvailable) {
                     Alert alert = new Alert(Alert.AlertType.WARNING);
-                    alert.setTitle("FFmpeg Not Found");
-                    alert.setHeaderText("Thumbnail embedding requires FFmpeg");
-                    alert.setContentText("FFmpeg is not installed or not found in PATH. " +
-                            "Thumbnail embedding may fail.\n\n" +
-                            "Install FFmpeg from ffmpeg.org or disable thumbnail embedding.\n\n" +
-                            "Continue anyway?");
+                    alert.setTitle(bundle.getString("alert.ffmpeg.missing.title"));
+                    alert.setHeaderText(bundle.getString("alert.ffmpeg.missing.header"));
+                    alert.setContentText(bundle.getString("alert.ffmpeg.missing.content"));
                     
-                    ButtonType continueButton = new ButtonType("Continue");
-                    ButtonType cancelButton = new ButtonType("Cancel", ButtonBar.ButtonData.CANCEL_CLOSE);
+                    ButtonType continueButton = new ButtonType(bundle.getString("alert.continue"));
+                    ButtonType cancelButton = new ButtonType(bundle.getString("alert.playlist.cancel"), ButtonBar.ButtonData.CANCEL_CLOSE);
                     alert.getButtonTypes().setAll(continueButton, cancelButton);
                     
                     alert.showAndWait().ifPresent(response -> {
@@ -594,10 +645,11 @@ public class MainController implements Initializable {
         }
         
         if (queuedCount > 0) {
-            appendLog("Started " + queuedCount + " download(s)" + 
-                      (skippedCount > 0 ? " (skipped " + skippedCount + " completed/active items)" : ""));
+            String suffix = skippedCount > 0 ? 
+                    java.text.MessageFormat.format(bundle.getString("log.downloads.started.suffix"), skippedCount) : "";
+            appendLog(java.text.MessageFormat.format(bundle.getString("log.downloads.started"), queuedCount, suffix));
         } else if (skippedCount > 0) {
-            appendLog("No new downloads to start - all " + skippedCount + " items are already completed or active");
+            appendLog(java.text.MessageFormat.format(bundle.getString("log.downloads.none.started"), skippedCount));
         }
     }
 
@@ -616,7 +668,8 @@ public class MainController implements Initializable {
                 embedSubtitlesCheckBox.isSelected(),
                 embedThumbnailCheckBox.isSelected(),
                 addMetadataCheckBox.isSelected(),
-                this::appendLog);
+                this::appendLog,
+                (messageKey, showProgress) -> updateStatus(messageKey, showProgress));
 
         // Track the task for pause/cancel functionality
         activeTasks.add(downloadTask);
@@ -652,7 +705,7 @@ public class MainController implements Initializable {
             }
         }
         
-        appendLog("Paused " + pausedCount + " active download(s)");
+        appendLog(java.text.MessageFormat.format(bundle.getString("log.downloads.paused"), pausedCount));
     }
 
     @FXML
@@ -660,7 +713,7 @@ public class MainController implements Initializable {
         ObservableList<DownloadItem> selectedItems = downloadTable.getSelectionModel().getSelectedItems();
         if (!selectedItems.isEmpty()) {
             downloadItems.removeAll(selectedItems);
-            appendLog("Removed " + selectedItems.size() + " item(s) from queue");
+            appendLog(java.text.MessageFormat.format(bundle.getString("log.items.removed"), selectedItems.size()));
         }
     }
 
@@ -700,10 +753,10 @@ public class MainController implements Initializable {
         testTask.setOnSucceeded(e -> {
             boolean available = testTask.getValue();
             if (available) {
-                ytDlpStatusLabel.setText("yt-dlp is working correctly");
+                ytDlpStatusLabel.setText(bundle.getString("status.ytdlp.working"));
                 ytDlpStatusLabel.setStyle("-fx-text-fill: green;");
             } else {
-                ytDlpStatusLabel.setText("yt-dlp not found or not working");
+                ytDlpStatusLabel.setText(bundle.getString("status.ytdlp.not.found"));
                 ytDlpStatusLabel.setStyle("-fx-text-fill: red;");
             }
         });
@@ -723,10 +776,10 @@ public class MainController implements Initializable {
         testTask.setOnSucceeded(e -> {
             boolean available = testTask.getValue();
             if (available) {
-                ffmpegStatusLabel.setText("FFmpeg is working correctly");
+                ffmpegStatusLabel.setText(bundle.getString("status.ffmpeg.working"));
                 ffmpegStatusLabel.setStyle("-fx-text-fill: green;");
             } else {
-                ffmpegStatusLabel.setText("FFmpeg not found in PATH");
+                ffmpegStatusLabel.setText(bundle.getString("status.ffmpeg.not.found"));
                 ffmpegStatusLabel.setStyle("-fx-text-fill: red;");
             }
         });
@@ -746,10 +799,10 @@ public class MainController implements Initializable {
         ytDlpCheckTask.setOnSucceeded(e -> {
             boolean available = ytDlpCheckTask.getValue();
             if (available) {
-                ytDlpStatusLabel.setText("yt-dlp is available");
+                ytDlpStatusLabel.setText(bundle.getString("status.ytdlp.available"));
                 ytDlpStatusLabel.setStyle("-fx-text-fill: green;");
             } else {
-                ytDlpStatusLabel.setText("yt-dlp not found - please install or configure path");
+                ytDlpStatusLabel.setText(bundle.getString("status.ytdlp.not.installed"));
                 ytDlpStatusLabel.setStyle("-fx-text-fill: red;");
             }
         });
@@ -765,10 +818,10 @@ public class MainController implements Initializable {
         ffmpegCheckTask.setOnSucceeded(e -> {
             boolean available = ffmpegCheckTask.getValue();
             if (available) {
-                ffmpegStatusLabel.setText("FFmpeg is available");
+                ffmpegStatusLabel.setText(bundle.getString("status.ffmpeg.available"));
                 ffmpegStatusLabel.setStyle("-fx-text-fill: green;");
             } else {
-                ffmpegStatusLabel.setText("FFmpeg not found - install for advanced features");
+                ffmpegStatusLabel.setText(bundle.getString("status.ffmpeg.not.installed"));
                 ffmpegStatusLabel.setStyle("-fx-text-fill: orange;");
             }
         });
@@ -823,5 +876,98 @@ public class MainController implements Initializable {
         }
         
         logger.info("Application shutdown complete");
+    }
+
+    /**
+     * Setup the language selection combo box
+     */
+    private void setupLanguageComboBox() {
+        if (languageComboBox != null) {
+            languageComboBox.setItems(FXCollections.observableArrayList(
+                    bundle.getString("settings.language.auto"),
+                    bundle.getString("settings.language.en"),
+                    bundle.getString("settings.language.pt_BR"),
+                    bundle.getString("settings.language.es"),
+                    bundle.getString("settings.language.it"),
+                    bundle.getString("settings.language.ja"),
+                    bundle.getString("settings.language.de")
+            ));
+        }
+    }
+
+    /**
+     * Set the language combo box value based on the language code
+     */
+    private void setLanguageComboBoxValue(String languageCode) {
+        if (languageComboBox == null) return;
+        
+        switch (languageCode) {
+            case "auto":
+                languageComboBox.setValue(bundle.getString("settings.language.auto"));
+                break;
+            case "en":
+                languageComboBox.setValue(bundle.getString("settings.language.en"));
+                break;
+            case "pt_BR":
+                languageComboBox.setValue(bundle.getString("settings.language.pt_BR"));
+                break;
+            case "es":
+                languageComboBox.setValue(bundle.getString("settings.language.es"));
+                break;
+            case "it":
+                languageComboBox.setValue(bundle.getString("settings.language.it"));
+                break;
+            case "ja":
+                languageComboBox.setValue(bundle.getString("settings.language.ja"));
+                break;
+            case "de":
+                languageComboBox.setValue(bundle.getString("settings.language.de"));
+                break;
+            default:
+                languageComboBox.setValue(bundle.getString("settings.language.auto"));
+                break;
+        }
+    }
+
+    /**
+     * Get the language code from the display value
+     */
+    private String getLanguageCodeFromDisplayValue(String displayValue) {
+        if (bundle.getString("settings.language.en").equals(displayValue)) {
+            return "en";
+        } else if (bundle.getString("settings.language.pt_BR").equals(displayValue)) {
+            return "pt_BR";
+        } else if (bundle.getString("settings.language.es").equals(displayValue)) {
+            return "es";
+        } else if (bundle.getString("settings.language.it").equals(displayValue)) {
+            return "it";
+        } else if (bundle.getString("settings.language.ja").equals(displayValue)) {
+            return "ja";
+        } else if (bundle.getString("settings.language.de").equals(displayValue)) {
+            return "de";
+        } else {
+            return "auto";
+        }
+    }
+    
+    /**
+     * Update status bar with a message and show/hide progress indicator
+     */
+    private void updateStatus(String messageKey, boolean showProgress) {
+        if (statusLabel != null && bundle != null) {
+            Platform.runLater(() -> {
+                statusLabel.setText(bundle.getString(messageKey));
+                if (statusProgressIndicator != null) {
+                    statusProgressIndicator.setVisible(showProgress);
+                }
+            });
+        }
+    }
+    
+    /**
+     * Set status to ready state
+     */
+    private void setStatusReady() {
+        updateStatus("status.ready", false);
     }
 }

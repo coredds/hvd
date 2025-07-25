@@ -126,4 +126,5 @@ public class PreferencesService {
     public static final String ADD_METADATA = "add.metadata";
     public static final String YTDLP_PATH = "ytdlp.path";
     public static final String DEFAULT_OUTPUT_DIRECTORY = "default.output.directory";
+    public static final String LANGUAGE = "app.language";
 } 
