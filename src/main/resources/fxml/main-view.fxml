@@ -7,7 +7,7 @@
 <VBox xmlns="http://javafx.com/javafx/11.0.1" xmlns:fx="http://javafx.com/fxml/1" fx:controller="coredds.hvd.controller.MainController">
    <children>
 
-      <TabPane prefHeight="750.0" prefWidth="800.0" tabClosingPolicy="UNAVAILABLE">
+      <TabPane tabClosingPolicy="UNAVAILABLE" VBox.vgrow="ALWAYS">
          <!-- Downloads Tab -->
          <Tab text="Downloads">
             <content>

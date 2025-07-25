@@ -87,7 +87,7 @@ echo - hvd-1.0.0.2.jar               ^(Main application^)
 echo - lib\                          ^(Dependencies^)
 echo - hvd.vbs                       ^(Silent launcher^)
 echo - hvd.bat                       ^(Console launcher^)
-echo - 256.ico                       ^(Application icon^)
+echo - 128.ico                       ^(Application icon^)
 echo - icons\                        ^(Additional icons^)
 echo.
 echo Installation:
@@ -108,12 +108,12 @@ echo Copying icons...
 if exist "src\main\resources\icons" (
     mkdir "dist\icons"
     copy "src\main\resources\icons\*.png" "dist\icons\" >nul 2>&1
-    copy "src\main\resources\icons\256.ico" "dist\" >nul 2>&1
+    copy "src\main\resources\icons\128.ico" "dist\" >nul 2>&1
 )
 
 REM Create professional shortcut with icon
 echo Creating application shortcut...
-powershell -Command "$WScriptShell = New-Object -ComObject WScript.Shell; $Shortcut = $WScriptShell.CreateShortcut('%CD%\dist\Holyrics Video Downloader.lnk'); $Shortcut.TargetPath = '%CD%\dist\hvd.vbs'; $Shortcut.WorkingDirectory = '%CD%\dist'; $Shortcut.IconLocation = '%CD%\dist\256.ico'; $Shortcut.Description = 'Holyrics Video Downloader - Download videos and audio from YouTube and other platforms'; $Shortcut.Save()"
+powershell -Command "$WScriptShell = New-Object -ComObject WScript.Shell; $Shortcut = $WScriptShell.CreateShortcut('%CD%\dist\Holyrics Video Downloader.lnk'); $Shortcut.TargetPath = '%CD%\dist\hvd.vbs'; $Shortcut.WorkingDirectory = '%CD%\dist'; $Shortcut.IconLocation = '%CD%\dist\128.ico'; $Shortcut.Description = 'Holyrics Video Downloader - Download videos and audio from YouTube and other platforms'; $Shortcut.Save()"
 
 echo.
 echo ✓ Windows distribution created in 'dist' folder
