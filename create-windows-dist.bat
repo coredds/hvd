@@ -1,6 +1,14 @@
 @echo off
 echo Creating Windows distribution for hvd...
 
+REM Kill any running Java processes that might lock the JAR
+echo Stopping any running Java processes...
+taskkill /F /IM java.exe >nul 2>&1
+taskkill /F /IM javaw.exe >nul 2>&1
+
+REM Wait a moment for processes to fully terminate
+timeout /t 2 /nobreak >nul
+
 REM Clean and build the project
 echo Building project...
 call apache-maven-3.9.6\bin\mvn.cmd clean package -q

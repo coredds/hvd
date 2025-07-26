@@ -28,6 +28,8 @@ public class YtDlpService {
     private static final Pattern PROGRESS_PATTERN = Pattern.compile("(\\d+(?:\\.\\d+)?)%");
     private static final Pattern DESTINATION_PATTERN = Pattern.compile("\\[download\\] Destination: (.+)");
     private static final Pattern FINAL_DESTINATION_PATTERN = Pattern.compile("\\[Merger\\] Merging formats into \"(.+)\"");
+    private static final Pattern THUMBNAIL_PATTERN = Pattern.compile("\\[download\\] (.+\\.(jpg|jpeg|png|webp)) has already been downloaded");
+    private static final Pattern THUMBNAIL_WRITING_PATTERN = Pattern.compile("\\[info\\] Writing video thumbnail (.+\\.(jpg|jpeg|png|webp)) to: (.+)");
     private static final Pattern FFMPEG_PROGRESS_PATTERN = Pattern.compile("\\[ffmpeg\\]");
     private static final Pattern POST_PROCESS_PATTERN = Pattern.compile("\\[PostProcessor\\]");
     private static final Pattern TITLE_PATTERN = Pattern.compile("\\[info\\] ([^:]+): Downloading");
@@ -185,8 +187,8 @@ public class YtDlpService {
     public CompletableFuture<String> extractVideoInfo(String url) {
         return CompletableFuture.supplyAsync(() -> {
             try {
-                // Use get-title option which works more reliably than --print
-                ProcessBuilder pb = new ProcessBuilder(ytDlpPath, "--get-title", "--no-playlist", url);
+                // Use --get-title to extract video title (may fail due to YouTube bot detection)
+                ProcessBuilder pb = new ProcessBuilder(ytDlpPath, "--get-title", "--no-playlist", "--cookies-from-browser", "firefox", url);
                 // Set UTF-8 environment variables for Windows compatibility
                 pb.environment().put("PYTHONIOENCODING", "utf-8");
                 pb.environment().put("LANG", "en_US.UTF-8");
@@ -197,11 +199,14 @@ public class YtDlpService {
                 String title = reader.readLine();
 
                 int exitCode = process.waitFor();
+                
                 if (exitCode == 0 && title != null && !title.trim().isEmpty()) {
-                    logger.debug("Extracted video title: {}", title);
-                    return title.trim();
+                    String cleanTitle = title.trim();
+                    logger.debug("Extracted video title: {}", cleanTitle);
+                    return cleanTitle;
                 }
 
+                logger.warn("Failed to extract title, exit code: {}, title: '{}'", exitCode, title != null ? title.trim() : "null");
                 return "Unknown Title";
             } catch (IOException | InterruptedException e) {
                 logger.error("Failed to extract video info for: " + url, e);
@@ -224,6 +229,12 @@ public class YtDlpService {
 
                 logger.info("Starting download for: " + item.getUrl());
                 logger.info("Command: " + String.join(" ", command));
+                
+
+                
+
+                
+
                 
                 // Update status to downloading
                 if (statusConsumer != null) {
@@ -300,14 +311,18 @@ public class YtDlpService {
                             downloadedFilePath = destMatcher.group(1);
                             logger.debug("Found destination: {}", downloadedFilePath);
                             
-                            // Track intermediate files for cleanup (definitely temporary files only)
-                            if (downloadedFilePath.matches(".*\\.f\\d+\\.(mp4|webm|m4a|aac)$") ||     // .f399.mp4, .f251.webm
-                                downloadedFilePath.matches(".*\\.temp\\.(mp4|webm|m4a)$") ||           // .temp.mp4
-                                downloadedFilePath.matches(".*\\.part$") ||                             // .part files
-                                downloadedFilePath.matches(".*\\.ytdl$") ||                             // .ytdl files
-                                downloadedFilePath.matches(".*\\.(webp|png|jpg|jpeg)$")) {             // thumbnail files
+                            // Track temp files for cleanup (include thumbnails if embedded)
+                            boolean isTemp = downloadedFilePath.matches(".*\\.f\\d+\\.(mp4|webm|m4a|aac)$") ||     // .f399.mp4, .f251.webm (format files)
+                                            downloadedFilePath.matches(".*\\.temp\\.(mp4|webm|m4a)$") ||           // .temp.mp4 (temp files)
+                                            downloadedFilePath.matches(".*\\.part$") ||                             // .part files (incomplete downloads)
+                                            downloadedFilePath.matches(".*\\.ytdl$");                               // .ytdl files (download metadata)
+                            
+                            // Also track thumbnail files if they will be embedded (so we can clean them up after)
+                            boolean isThumbnail = downloadedFilePath.matches(".*\\.(png|webp|jpg|jpeg)$");
+                            
+                            if (isTemp || (embedThumbnail && isThumbnail)) {
                                 tempFiles.add(downloadedFilePath);
-                                logger.debug("Added temp file for cleanup: {}", downloadedFilePath);
+                                logger.debug("Added {} file for cleanup: {}", isThumbnail ? "thumbnail" : "temp", downloadedFilePath);
                             }
                             
                             // Extract title from filename as backup if no title was found yet
@@ -316,6 +331,30 @@ public class YtDlpService {
                                 if (titleFromFilename != null) {
                                     javafx.application.Platform.runLater(() -> item.setTitle(titleFromFilename));
                                 }
+                            }
+                        }
+
+                        // Extract thumbnail file paths (separate detection patterns)
+                        Matcher thumbnailMatcher = THUMBNAIL_PATTERN.matcher(line);
+                        if (thumbnailMatcher.find()) {
+                            String thumbnailPath = thumbnailMatcher.group(1);
+                            logger.debug("Found thumbnail: {}", thumbnailPath);
+                            
+                            if (embedThumbnail) {
+                                tempFiles.add(thumbnailPath);
+                                logger.debug("Added thumbnail file for cleanup: {}", thumbnailPath);
+                            }
+                        }
+
+                        // Extract thumbnail writing info (alternative pattern)
+                        Matcher thumbnailWritingMatcher = THUMBNAIL_WRITING_PATTERN.matcher(line);
+                        if (thumbnailWritingMatcher.find()) {
+                            String thumbnailPath = thumbnailWritingMatcher.group(3);
+                            logger.debug("Found thumbnail writing to: {}", thumbnailPath);
+                            
+                            if (embedThumbnail) {
+                                tempFiles.add(thumbnailPath);
+                                logger.debug("Added thumbnail file for cleanup: {}", thumbnailPath);
                             }
                         }
 
@@ -371,21 +410,8 @@ public class YtDlpService {
                 activeProcesses.remove(process);
 
                 if (exitCode == 0) {
-                    // Update status for cleanup
-                    if (statusConsumer != null) {
-                        javafx.application.Platform.runLater(() -> 
-                            statusConsumer.accept("status.cleanup", true));
-                    }
-                    
-                    // Wait a moment for all post-processing to complete
-                    try {
-                        Thread.sleep(2000); // Wait 2 seconds for thumbnail processing to finish
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                    }
-                    
-                    // Clean up intermediate files using outer class method
-                    YtDlpService.this.cleanupIntermediateFiles(tempFilesForCleanup, finalFilePathForCleanup);
+                    // Cleanup temp files and embedded thumbnails
+                    YtDlpService.this.cleanupIntermediateFiles(tempFilesForCleanup, finalFilePathForCleanup, embedThumbnail);
                     
                     javafx.application.Platform.runLater(() -> {
                         item.setStatus(DownloadItem.Status.COMPLETED);
@@ -421,9 +447,12 @@ public class YtDlpService {
         command.add("-P");
         command.add(outputDirectory);
         
-        // Use proper filename template to preserve video title and avoid yt-dlp default naming
+        // Use proper filename template with character sanitization for cross-platform compatibility
         command.add("-o");
-        command.add("%(title).200s [%(id)s].%(ext)s");
+        command.add("%(title).200B [%(id)s].%(ext)s");
+        
+        // Ensure filename compatibility across platforms
+        command.add("--restrict-filenames");
         
         // Also force no default filename format
         command.add("--no-clean-infojson");
@@ -444,20 +473,22 @@ public class YtDlpService {
                 formatString = "best";
             }
             command.add(formatString);
+            logger.debug("Format selection - Quality: '{}', Format: '{}', Generated format string: '{}'", videoQuality, videoFormat, formatString);
             
-            // Always ensure compatible output format with H.264 video
-            String targetFormat = getTargetVideoFormat(videoFormat);
-            command.add("--merge-output-format");
-            command.add(targetFormat);
+            // Only convert format when explicitly requested by user
+            if (!isBestFormat(videoFormat) && videoFormat != null) {
+                // User explicitly chose a specific format - honor that choice
+                command.add("--merge-output-format");
+                command.add(videoFormat);
+                
+                // Also specify in format selection to prefer this format
+                // This is already handled in buildVideoFormatString
+            }
             
-            // Re-encode if the downloaded format isn't compatible with the target
-            // This ensures proper codecs for maximum player compatibility
-            command.add("--recode-video");
-            command.add(targetFormat);
-            
-            // CRITICAL: Audio format must come AFTER re-encoding to override default codec
-            // For video downloads with specific audio format, force post-processing
-            if (audioFormat != null && !audioFormat.isEmpty()) {
+            // Audio format handling - only convert when explicitly requested
+            if (audioFormat != null && !audioFormat.isEmpty() && 
+                !"best".equalsIgnoreCase(audioFormat) && !"default".equalsIgnoreCase(audioFormat)) {
+                // User explicitly chose audio format
                 command.add("--audio-format");
                 command.add(audioFormat);
             }
@@ -469,12 +500,13 @@ public class YtDlpService {
             command.add("--embed-subs");
         }
 
-        // Thumbnail options - simplified to avoid FFmpeg conflicts
+        // Thumbnail options - prioritize embedding in video
         if (embedThumbnail) {
-            // Write thumbnail file (always works)
             command.add("--write-thumbnail");
-            // Embed thumbnail (may conflict with post-processing, but try anyway)
             command.add("--embed-thumbnail");
+            // Convert thumbnail to compatible format for embedding
+            command.add("--convert-thumbnails");
+            command.add("jpg");
         }
 
         // Metadata options
@@ -494,6 +526,10 @@ public class YtDlpService {
             logger.info("Downloading playlist (no --no-playlist flag)");
         }
 
+        // Use Firefox cookies for authentication
+        command.add("--cookies-from-browser");
+        command.add("firefox");
+
         // URL
         command.add(item.getUrl());
 
@@ -502,18 +538,18 @@ public class YtDlpService {
 
     /**
      * Build video format string combining quality and format preferences
-     * Prioritizes resolution quality, then uses FFmpeg post-processing for compatibility
+     * Prioritizes resolution quality while preserving original video properties
      */
     private String buildVideoFormatString(String videoQuality, String videoFormat) {
         
         // Handle special cases first - check for all possible translations
         if (isBestAvailable(videoQuality) || videoQuality == null) {
             if (isBestFormat(videoFormat) || videoFormat == null) {
-                // Get the best quality available, we'll handle compatibility via post-processing
+                // Get the best quality available
                 return "bestvideo+bestaudio/best";
             } else {
-                // Best quality video in specific format (try format-specific first)
-                return "bestvideo[ext=" + videoFormat + "]+bestaudio/bestvideo+bestaudio/best";
+                // User wants specific format - try to get it natively first, fallback gracefully
+                return "bestvideo[ext=" + videoFormat + "]+bestaudio[ext=m4a]/bestvideo[ext=" + videoFormat + "]+bestaudio/bestvideo+bestaudio";
             }
         }
         
@@ -532,14 +568,20 @@ public class YtDlpService {
         }
         
         if (isBestFormat(videoFormat) || videoFormat == null) {
-            // Prioritize resolution over format - get the best quality at target resolution
-            return "bestvideo[height<=" + heightTarget + "]+bestaudio/" +
-                   "best[height<=" + heightTarget + "]/best";
+            // Proper height-based format selection 
+            return switch (heightTarget) {
+                case "2160" -> "bestvideo[height<=2160]+bestaudio/best[height<=2160]";
+                case "1440" -> "bestvideo[height<=1440]+bestaudio/best[height<=1440]";
+                case "1080" -> "bestvideo[height<=1080]+bestaudio/best[height<=1080]";
+                case "720" -> "bestvideo[height<=720]+bestaudio/best[height<=720]";
+                case "480" -> "bestvideo[height<=480]+bestaudio/best[height<=480]";
+                default -> "bestvideo[height<=720]+bestaudio/best[height<=720]";
+            };
         } else {
-            // Height + format preference - try format-specific first, fallback to any format
+            // User wants specific resolution AND format - try native first, minimal fallback
             return "bestvideo[height<=" + heightTarget + "][ext=" + videoFormat + "]+bestaudio/" +
-                   "bestvideo[height<=" + heightTarget + "]+bestaudio/" +
-                   "best[height<=" + heightTarget + "]/best";
+                   "best[height<=" + heightTarget + "][ext=" + videoFormat + "]/" +
+                   "bestvideo[height<=" + heightTarget + "]+bestaudio";
         }
     }
     
@@ -547,7 +589,8 @@ public class YtDlpService {
      * Get the height value from quality string
      */
     private String getHeightFromQuality(String videoQuality) {
-        return switch (videoQuality) {
+        logger.debug("Getting height from quality string: '{}'", videoQuality);
+        String height = switch (videoQuality) {
             case "2160p (4K)" -> "2160";
             case "1440p" -> "1440";
             case "1080p" -> "1080";
@@ -556,6 +599,8 @@ public class YtDlpService {
             case "360p" -> "360";
             default -> null;
         };
+        logger.debug("Mapped quality '{}' to height: '{}'", videoQuality, height);
+        return height;
     }
     
     /**
@@ -594,38 +639,8 @@ public class YtDlpService {
                "Bestes Format".equals(videoFormat);
     }
 
-    /**
-     * Get the target video format for output, prioritizing compatibility
-     */
-    private String getTargetVideoFormat(String videoFormat) {
-        if (isBestFormat(videoFormat) || videoFormat == null) {
-            return "mp4"; // Default to mp4 for best compatibility
-        }
-        
-        return switch (videoFormat) {
-            case "mp4" -> "mp4";
-            case "webm" -> "webm"; 
-            case "mkv" -> "mkv";
-            case "avi" -> "avi";
-            case "mov" -> "mov";
-            default -> "mp4"; // Default fallback for compatibility
-        };
-    }
-    
-    /**
-     * Get the FFmpeg audio codec name for the specified audio format
-     */
-    private String getAudioCodec(String audioFormat) {
-        return switch (audioFormat) {
-            case "mp3" -> "libmp3lame";
-            case "aac" -> "aac";
-            case "m4a" -> "aac";
-            case "opus" -> "libopus";
-            case "flac" -> "flac";
-            case "wav" -> "pcm_s16le";
-            default -> "aac"; // Default fallback
-        };
-    }
+
+
     
     /**
      * Extract video title from filename using our template pattern
@@ -674,30 +689,33 @@ public class YtDlpService {
     }
     
     /**
-     * Clean up intermediate files after successful download
+     * Clean up temporary files after successful download (removes embedded thumbnails)
      */
-    private void cleanupIntermediateFiles(List<String> tempFiles, String finalFilePath) {
-        logger.info("Starting cleanup process...");
-        
-        // Clean up tracked temp files
+    private void cleanupIntermediateFiles(List<String> tempFiles, String finalFilePath, boolean embedThumbnail) {
+        // Clean up tracked temp files only
         if (tempFiles != null && !tempFiles.isEmpty()) {
-            logger.info("Cleaning up {} tracked intermediate files", tempFiles.size());
+            logger.debug("Cleaning up {} tracked temporary files", tempFiles.size());
             
             for (String tempFile : tempFiles) {
                 deleteFileIfExists(tempFile, finalFilePath);
             }
         }
         
+        // Clean up embedded thumbnail if needed
+        if (embedThumbnail && finalFilePath != null) {
+            cleanupEmbeddedThumbnail(finalFilePath);
+        }
+        
         // Additional cleanup: scan for other temp files based on final file pattern
         if (finalFilePath != null) {
-            cleanupAdditionalTempFiles(finalFilePath);
+            cleanupAdditionalTempFiles(finalFilePath, embedThumbnail);
         }
     }
     
-        /**
-     * Clean up additional temp files that might not be caught by the tracking
+    /**
+     * Clean up additional temp files that might not be caught by the tracking (removes embedded thumbnails)
      */
-    private void cleanupAdditionalTempFiles(String finalFilePath) {
+    private void cleanupAdditionalTempFiles(String finalFilePath, boolean embedThumbnail) {
         try {
             File finalFile = new File(finalFilePath);
             File parentDir = finalFile.getParentFile();
@@ -709,27 +727,40 @@ public class YtDlpService {
                 videoId = baseName.replaceAll(".*\\[([a-zA-Z0-9_-]+)\\]\\.\\w+$", "$1");
             }
             
-            if (videoId != null && parentDir != null && parentDir.exists()) {
-                logger.info("Scanning directory for additional temp files with video ID: {}", videoId);
+                            if (videoId != null && parentDir != null && parentDir.exists()) {
+                logger.debug("Scanning directory for additional temp files with video ID: {}", videoId);
                 File[] files = parentDir.listFiles();
                 if (files != null) {
                     int cleanedCount = 0;
                     for (File file : files) {
                         String fileName = file.getName();
-                        // Clean up files with same video ID that are temp files
+                        // Clean up temp files and embedded thumbnails when requested
                         if (fileName.contains(videoId) && !fileName.equals(baseName)) {
+                            boolean shouldDelete = false;
+                            
+                            // Always clean up these temp files
                             if (fileName.matches(".*\\.temp\\.(mp4|webm|m4a)$") ||
                                 fileName.matches(".*\\.part$") ||
                                 fileName.matches(".*\\.ytdl$") ||
-                                fileName.matches(".*\\.(png|webp|jpg|jpeg)$") ||  // Include thumbnails
-                                fileName.matches(".*\\.f\\d+\\.(mp4|webm|m4a)$")) { // Include format files
-                                logger.info("Cleaning up temp/thumbnail file: {}", fileName);
+                                fileName.matches(".*\\.f\\d+\\.(mp4|webm|m4a)$")) { // Format-specific temp files
+                                shouldDelete = true;
+                            }
+                            
+                            // Clean up thumbnails only if they were embedded
+                            if (embedThumbnail && fileName.matches(".*\\.(png|webp|jpg|jpeg)$")) {
+                                shouldDelete = true;
+                            }
+                            
+                            if (shouldDelete) {
+                                logger.debug("Cleaning up temp file: {}", fileName);
                                 deleteFileIfExists(file.getAbsolutePath(), finalFilePath);
                                 cleanedCount++;
                             }
                         }
                     }
-                    logger.info("Additional cleanup removed {} files", cleanedCount);
+                    if (cleanedCount > 0) {
+                        logger.debug("Additional cleanup removed {} temp files", cleanedCount);
+                    }
                 }
             }
         } catch (Exception e) {
@@ -753,6 +784,37 @@ public class YtDlpService {
             }
         } catch (Exception e) {
             logger.warn("Error deleting temp file {}: {}", filePath, e.getMessage());
+        }
+    }
+    
+    /**
+     * Clean up embedded thumbnail file based on the final video file path
+     */
+    private void cleanupEmbeddedThumbnail(String finalFilePath) {
+        try {
+            File finalFile = new File(finalFilePath);
+            String baseName = finalFile.getName();
+            
+            // Remove extension and construct thumbnail filename
+            int lastDot = baseName.lastIndexOf('.');
+            if (lastDot > 0) {
+                String nameWithoutExt = baseName.substring(0, lastDot);
+                String thumbnailPath = finalFile.getParent() + File.separator + nameWithoutExt + ".jpg";
+                
+                File thumbnailFile = new File(thumbnailPath);
+                if (thumbnailFile.exists()) {
+                    boolean deleted = thumbnailFile.delete();
+                    if (deleted) {
+                        logger.debug("Cleaned up embedded thumbnail: {}", thumbnailPath);
+                    } else {
+                        logger.warn("Failed to delete embedded thumbnail: {}", thumbnailPath);
+                    }
+                } else {
+                    logger.debug("No thumbnail file found to clean up: {}", thumbnailPath);
+                }
+            }
+        } catch (Exception e) {
+            logger.warn("Error cleaning up embedded thumbnail for {}: {}", finalFilePath, e.getMessage());
         }
     }
 }
